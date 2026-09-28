@@ -1,0 +1,23 @@
+# Xcode / SwiftPM
+.DS_Store
+build/
+DerivedData/
+*.xcodeproj/
+*.xcworkspace/
+!Packages/**/*.xcworkspace/
+xcuserdata/
+*.xcuserstate
+.build/
+.swiftpm/
+Package.resolved
+*.xcresult/
+
+# Node (proxy)
+node_modules/
+.wrangler/
+.dev.vars
+
+# Local secrets and outputs
+*.env
+Secrets.xcconfig
+eval-output/
