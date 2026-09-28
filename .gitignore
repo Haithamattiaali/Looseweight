@@ -21,3 +21,4 @@ node_modules/
 *.env
 Secrets.xcconfig
 eval-output/
+eval-data/
