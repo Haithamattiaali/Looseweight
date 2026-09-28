@@ -39,7 +39,7 @@ enum ImageTools {
 
     static func jpeg(_ image: CGImage, quality: Double = 0.85) -> Data? {
         let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
+        guard let destination = CGImageDestinationCreateWithData(data as CFMutableData, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
         CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
         return CGImageDestinationFinalize(destination) ? data as Data : nil
     }

@@ -1,0 +1,20 @@
+name = "looseweight-proxy"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# Secrets (never put them here):
+#   npx wrangler@latest secret put ANTHROPIC_API_KEY
+#   npx wrangler@latest secret put APP_TOKENS        # comma-separated tokens the app may use
+
+[vars]
+ALLOWED_BETAS = "server-side-fallback-2026-07-01"
+MODEL_PATTERN = "^claude-(opus|sonnet|haiku)-[a-z0-9-]+$"
+MAX_BODY_BYTES = "12000000"
+MAX_OUTPUT_TOKENS = "32000"
+RATE_LIMIT_PER_10MIN = "40"
+
+# Optional: Cloudflare's rate limiting binding instead of the in-memory limiter.
+# [[ratelimits]]
+# name = "RATE_LIMITER"
+# namespace_id = "1001"
+# simple = { limit = 40, period = 60 }

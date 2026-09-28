@@ -1,0 +1,17 @@
+{
+  "name": "looseweight-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Keeps the Anthropic API key off the phone: a thin, checked pass-through for the Looseweight app.",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "deploy": "npx wrangler@latest deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20260702.1",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}
