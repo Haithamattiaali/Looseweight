@@ -101,7 +101,7 @@ public enum EnergyModel {
         weightKg * 0.01
     }
 
-    public enum ProfileProblem: Error, Equatable, Sendable {
+    public enum ProfileProblem: Error, Hashable, Sendable {
         case goalBelowHealthyWeight(minimumKg: Double)
         case implausible(String)
     }

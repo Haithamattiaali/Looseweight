@@ -8,7 +8,7 @@ OUT="$ROOT/ci-output"
 mkdir -p "$OUT"
 
 XCODE=$(ls -d /Applications/Xcode_*.app 2>/dev/null | grep -vi beta | sort -V | tail -1 || true)
-if [ -n "$XCODE" ]; then sudo xcode-select -s "$XCODE"; fi
+if [ -n "${CI:-}" ] && [ -n "$XCODE" ]; then sudo xcode-select -s "$XCODE"; fi
 { xcodebuild -version; sw_vers; } | tee "$OUT/toolchain.txt"
 
 echo "::group::Core engine tests (macOS)"
@@ -40,6 +40,12 @@ xcodebuild -project Looseweight.xcodeproj -scheme Looseweight -destination "id=$
 echo "::endgroup::"
 
 mkdir -p "$OUT/screenshots"
+# Demo photo for the simulator walkthrough: a real weighed plate from the Nutrition5k dataset (not stored in the repo).
+mkdir -p "$ROOT/build"
+DEMO="$ROOT/build/demo-meal.png"
+if curl -sfL -o "$DEMO" "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1564773942/rgb.png"; then
+  export TEST_RUNNER_LW_DEMO_PHOTO="$DEMO"
+fi
 xcrun simctl io "$DEVICE_ID" recordVideo --codec h264 --force "$OUT/app-walkthrough.mp4" &
 RECORDER=$!
 sleep 2
