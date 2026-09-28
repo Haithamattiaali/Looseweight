@@ -129,6 +129,12 @@ public struct FoodMatch: Codable, Hashable, Sendable {
     public var id: String
     public var name: String
     public var source: FoodRecord.Source
+
+    public init(id: String, name: String, source: FoodRecord.Source) {
+        self.id = id
+        self.name = name
+        self.source = source
+    }
 }
 
 /// One line of the meal after the app's own checks. Editing `grams` updates the nutrients.
@@ -176,6 +182,17 @@ public struct MealEstimate: Codable, Hashable, Sendable {
     public var warnings: [String]
     public var modelID: String?
     public var usedDepth: Bool
+
+    public init(title: String, items: [EstimatedItem], overallConfidence: Double, clarifyingQuestion: String? = nil,
+                warnings: [String] = [], modelID: String? = nil, usedDepth: Bool = false) {
+        self.title = title
+        self.items = items
+        self.overallConfidence = overallConfidence
+        self.clarifyingQuestion = clarifyingQuestion
+        self.warnings = warnings
+        self.modelID = modelID
+        self.usedDepth = usedDepth
+    }
 
     public var total: Nutrients { items.map(\.nutrients).sum() }
 
