@@ -79,7 +79,7 @@ flowchart LR
 | Part | Path | Tech | Tested by |
 |---|---|---|---|
 | Core engine | `Packages/LooseweightKit` | Swift 6, Foundation only (runs on iOS, macOS, Linux) | `swift test` on Linux + macOS CI |
-| iPhone app | `App/` | SwiftUI iOS 26 (Liquid Glass), SwiftData, AVFoundation LiDAR, VisionKit, Swift Charts, HealthKit (opt-in) | Xcode unit + UI tests on iOS Simulator in CI, screenshots |
+| iPhone app | `App/` | SwiftUI iOS 26 (Liquid Glass), SwiftData, ARKit + LiDAR, Vision, VisionKit, Swift Charts | Xcode unit + UI tests on iOS Simulator in CI, screenshots |
 | API proxy | `proxy/` | Cloudflare Worker (TypeScript) | vitest |
 | Accuracy eval | `Packages/LooseweightKit/Sources/lw-eval` | Swift CLI on Nutrition5k (real dishes with weighed calories + depth) | runs when an API key is present |
 | CI | `.github/workflows/ci.yml` | GitHub Actions (Linux + macOS runners) | — |
@@ -99,11 +99,19 @@ flowchart LR
 - Append-only history; assistant content is echoed back byte-for-byte. System prompt + tools are cached (`cache_control`).
 - `stop_reason == "refusal"` → friendly error, no partial result.
 
-## 7. Privacy & safety
+## 7. Evidence so far
+
+| Check | Result |
+|---|---|
+| Synthetic scenes (exact ray-cast depth, like LiDAR) | volume error ≤ 6 % in one frame, ≤ 8 % fused from 12 noisy frames; plate floor found within 2.5 mm; true area without LiDAR within 10 % |
+| Real depth-camera plates (Nutrition5k, 26 overhead shots, crude colour mask) | plausible volumes, median 0.57 g/mL; volume alone correlates r = 0.50 with weighed mass because food densities differ (salad ≈ 0.1, meat ≈ 1.0) — the model supplies density per food |
+| Full AI accuracy (`lw-eval ai --compare`) | needs an API key; reports calorie error with and without on-device measurements |
+
+## 8. Privacy & safety
 
 - Photos go only to the chosen AI connection. Data stays on the phone (SwiftData). Export and delete-all in Settings.
 - Not medical advice. Targets never go below the floors in §3.
 
-## 8. Out of scope for v1
+## 9. Out of scope for v1
 
-App Store release, accounts/sync, Apple Watch, widgets, Arabic UI.
+App Store release, accounts/sync, HealthKit sync, Apple Watch, widgets, Arabic UI.
