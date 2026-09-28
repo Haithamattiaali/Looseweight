@@ -25,23 +25,53 @@ enum AIMode: String, CaseIterable, Identifiable {
 @Observable
 final class AppModel {
     var profile: UserProfile? {
-        didSet { save(profile, key: Keys.profile) }
+        get { storedProfile }
+        set {
+            storedProfile = newValue
+            save(newValue, key: Keys.profile)
+        }
     }
     var aiMode: AIMode {
-        didSet { defaults.set(aiMode.rawValue, forKey: Keys.aiMode) }
+        get { storedAIMode }
+        set {
+            storedAIMode = newValue
+            defaults.set(newValue.rawValue, forKey: Keys.aiMode)
+        }
     }
     var effort: AnalysisEffort {
-        didSet { defaults.set(effort.rawValue, forKey: Keys.effort) }
+        get { storedEffort }
+        set {
+            storedEffort = newValue
+            defaults.set(newValue.rawValue, forKey: Keys.effort)
+        }
     }
     var proxyURL: String {
-        didSet { defaults.set(proxyURL, forKey: Keys.proxyURL) }
+        get { storedProxyURL }
+        set {
+            storedProxyURL = newValue
+            defaults.set(newValue, forKey: Keys.proxyURL)
+        }
     }
     var modelOverride: String {
-        didSet { defaults.set(modelOverride, forKey: Keys.modelOverride) }
+        get { storedModelOverride }
+        set {
+            storedModelOverride = newValue
+            defaults.set(newValue, forKey: Keys.modelOverride)
+        }
     }
     var cuisineHint: String {
-        didSet { defaults.set(cuisineHint, forKey: Keys.cuisine) }
+        get { storedCuisineHint }
+        set {
+            storedCuisineHint = newValue
+            defaults.set(newValue, forKey: Keys.cuisine)
+        }
     }
+    private var storedProfile: UserProfile?
+    private var storedAIMode: AIMode
+    private var storedEffort: AnalysisEffort
+    private var storedProxyURL: String
+    private var storedModelOverride: String
+    private var storedCuisineHint: String
     private(set) var hasAPIKey: Bool
     private(set) var hasProxyToken: Bool
     var lastModelID: String?
@@ -73,16 +103,16 @@ final class AppModel {
         let bundledToken = (Bundle.main.object(forInfoDictionaryKey: "LWProxyToken") as? String) ?? ""
         if Keychain.read(Keys.proxyToken) == nil, !bundledToken.isEmpty { Keychain.write(bundledToken, for: Keys.proxyToken) }
 
-        profile = Self.load(UserProfile.self, key: Keys.profile, defaults: defaults)
-        proxyURL = defaults.string(forKey: Keys.proxyURL) ?? bundledProxy
+        storedProfile = Self.load(UserProfile.self, key: Keys.profile, defaults: defaults)
+        storedProxyURL = defaults.string(forKey: Keys.proxyURL) ?? bundledProxy
         let defaultMode: AIMode = bundledProxy.isEmpty ? .demo : .cloud
-        aiMode = AIMode(rawValue: defaults.string(forKey: Keys.aiMode) ?? "") ?? defaultMode
-        effort = AnalysisEffort(rawValue: defaults.string(forKey: Keys.effort) ?? "") ?? .high
-        modelOverride = defaults.string(forKey: Keys.modelOverride) ?? ""
-        cuisineHint = defaults.string(forKey: Keys.cuisine) ?? ""
+        storedAIMode = AIMode(rawValue: defaults.string(forKey: Keys.aiMode) ?? "") ?? defaultMode
+        storedEffort = AnalysisEffort(rawValue: defaults.string(forKey: Keys.effort) ?? "") ?? .high
+        storedModelOverride = defaults.string(forKey: Keys.modelOverride) ?? ""
+        storedCuisineHint = defaults.string(forKey: Keys.cuisine) ?? ""
         hasAPIKey = Keychain.read(Keys.apiKey) != nil
         hasProxyToken = Keychain.read(Keys.proxyToken) != nil
-        if isUITest { aiMode = .demo }
+        if isUITest { storedAIMode = .demo }
     }
 
     // MARK: Targets

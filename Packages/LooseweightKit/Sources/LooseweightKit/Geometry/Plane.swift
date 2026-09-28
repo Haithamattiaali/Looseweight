@@ -70,7 +70,7 @@ public enum PlaneFitter {
     public static func ransac(
         _ points: [Vec3],
         up: Vec3? = nil,
-        maxTiltDegrees: Double = 25,
+        maxTiltDegrees: Double = 12,
         inlierThreshold: Double = 0.006,
         iterations: Int = 400,
         seed: UInt64 = 7
