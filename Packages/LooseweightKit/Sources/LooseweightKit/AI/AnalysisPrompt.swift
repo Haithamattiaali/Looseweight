@@ -31,6 +31,13 @@ public enum AnalysisPrompt {
        - No measurements: use visual scale (a standard dinner plate is 26–28 cm, a fork 18–20 cm, a teaspoon \
     13–15 cm, the pixel scale when given) and count pieces where you can.
        - Packaged food with readable label text or a barcode product: use those values and the pack size.
+       - Always cross-check: also make a visual estimate from the photo alone. Measured volume is the envelope \
+    over the food, so it includes air between pieces, overhangs and sometimes plate rim or garnish; loose, leafy or \
+    piled food weighs far less than its envelope. When measurement and visual estimate differ by more than 1.6×, \
+    trust the visual estimate, widen the range and lower the confidence. Measurements under 10 g or over 1.5 kg \
+    for a single item are almost always errors.
+       - People overestimate plated portions. Cafeteria and home plates are usually 60–250 g of food per item; \
+    only go above that with clear visual evidence such as a very full large plate.
     4. Add hidden ingredients as their own items with is_hidden_ingredient true when you see signs of them: oil \
     sheen, deep-fried or pan-fried surfaces, butter, dressing, sugar in drinks. Do not add hidden items without \
     a visual reason.
