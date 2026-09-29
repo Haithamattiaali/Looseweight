@@ -102,10 +102,12 @@ final class AppModel {
         let bundledProxy = (Bundle.main.object(forInfoDictionaryKey: "LWProxyURL") as? String) ?? ""
         let bundledToken = (Bundle.main.object(forInfoDictionaryKey: "LWProxyToken") as? String) ?? ""
         if Keychain.read(Keys.proxyToken) == nil, !bundledToken.isEmpty { Keychain.write(bundledToken, for: Keys.proxyToken) }
+        let bundledKey = ((Bundle.main.object(forInfoDictionaryKey: "LWAnthropicKey") as? String) ?? "").trimmingCharacters(in: .whitespaces)
+        if Keychain.read(Keys.apiKey) == nil, bundledKey.hasPrefix("sk-ant-") { Keychain.write(bundledKey, for: Keys.apiKey) }
 
         storedProfile = Self.load(UserProfile.self, key: Keys.profile, defaults: defaults)
         storedProxyURL = defaults.string(forKey: Keys.proxyURL) ?? bundledProxy
-        let defaultMode: AIMode = bundledProxy.isEmpty ? .demo : .cloud
+        let defaultMode: AIMode = !bundledProxy.isEmpty ? .cloud : (Keychain.read(Keys.apiKey) != nil ? .personalKey : .demo)
         storedAIMode = AIMode(rawValue: defaults.string(forKey: Keys.aiMode) ?? "") ?? defaultMode
         storedEffort = AnalysisEffort(rawValue: defaults.string(forKey: Keys.effort) ?? "") ?? .high
         storedModelOverride = defaults.string(forKey: Keys.modelOverride) ?? ""

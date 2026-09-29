@@ -43,6 +43,10 @@ targets:
         NSPhotoLibraryUsageDescription: Choose a meal photo to analyse.
         LWProxyURL: $(LW_PROXY_URL)
         LWProxyToken: $(LW_PROXY_TOKEN)
+        LWAnthropicKey: $(LW_ANTHROPIC_KEY)
+    configFiles:
+      Debug: Config/App.xcconfig
+      Release: Config/App.xcconfig
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.haithamattiaali.looseweight
