@@ -156,13 +156,27 @@ private struct CameraScreen: View {
         }
     }
 
+    /// Corner brackets around the whole capture area: everything inside is analysed, every plate and side.
     private var reticle: some View {
-        Circle()
-            .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8, 10]))
-            .foregroundStyle(.white.opacity(0.7))
-            .frame(width: 260, height: 260)
-            .shadow(color: .black.opacity(0.3), radius: 6)
-            .allowsHitTesting(false)
+        GeometryReader { proxy in
+            let inset: CGFloat = 20
+            let rect = CGRect(x: inset, y: 120, width: proxy.size.width - inset * 2, height: proxy.size.height - 330)
+            ZStack(alignment: .top) {
+                CaptureBrackets(length: 34)
+                    .stroke(.white.opacity(0.85), style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .frame(width: rect.width, height: rect.height)
+                    .position(x: rect.midX, y: rect.midY)
+                    .shadow(color: .black.opacity(0.3), radius: 6)
+                Text("Fit every plate and side inside the frame")
+                    .font(.rounded(.caption, weight: .semibold))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .glassEffect(.regular, in: .capsule)
+                    .position(x: rect.midX, y: rect.minY + 24)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     private var topBar: some View {
@@ -293,6 +307,23 @@ private struct ARPreview: UIViewRepresentable {
 
     func makeUIView(context: Context) -> ARView { arView }
     func updateUIView(_ uiView: ARView, context: Context) {}
+}
+
+/// Four rounded corner marks around a rectangle.
+private struct CaptureBrackets: Shape {
+    var length: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let l = min(length, rect.width / 3, rect.height / 3)
+        for (corner, dx, dy) in [(CGPoint(x: rect.minX, y: rect.minY), 1.0, 1.0), (CGPoint(x: rect.maxX, y: rect.minY), -1.0, 1.0),
+                                 (CGPoint(x: rect.minX, y: rect.maxY), 1.0, -1.0), (CGPoint(x: rect.maxX, y: rect.maxY), -1.0, -1.0)] {
+            path.move(to: CGPoint(x: corner.x, y: corner.y + dy * l))
+            path.addLine(to: corner)
+            path.addLine(to: CGPoint(x: corner.x + dx * l, y: corner.y))
+        }
+        return path
+    }
 }
 
 /// Bubble level: the dot sits in the centre when the phone is flat.
