@@ -20,5 +20,5 @@ node_modules/
 # Local secrets and outputs
 *.env
 Secrets.xcconfig
-eval-output/
+eval-output*/
 eval-data/
