@@ -157,7 +157,9 @@ public enum MealPlanner {
                 if delta.carbs > 0.5, total.carbs + delta.carbs > left.carbs + options.carbsSlackG { continue }
                 if delta.fat > 0.5, total.fat + delta.fat > left.fat + options.fatSlackG { continue }
                 let proteinStillNeeded = max(left.protein - total.protein, 0)
-                let proteinValue = min(delta.protein, proteinStillNeeded) * 4 * 3
+                // Protein still needed counts triple; protein beyond the target still beats empty calories.
+                let neededPart = min(delta.protein, proteinStillNeeded)
+                let proteinValue = neededPart * 4 * 3 + max(delta.protein - neededPart, 0) * 4
                 let value = proteinValue + delta.kcal * 0.5 + delta.fiber * 8
                 let score = value / max(delta.kcal, 1)
                 if best.map({ score > $0.score + 1e-9 }) ?? true { best = (index, score) }

@@ -9,6 +9,8 @@ public enum AnalysisPrompt {
     What you receive
     - Image 1: the meal photo. All coordinates are pixels of image 1, origin at the top-left.
     - Image 2 (when present): the same photo with the numbered regions the phone found on the device, and a 5 cm scale bar.
+    - Further images (when present): the same plate from other angles, picked from a short capture sweep. Use them \
+    to see sides, heights, hidden items and counts. Each food is still one item, and coordinates stay in image 1.
     - An on-device report. The phone measured the scene itself: the table plane from ARKit, depth from LiDAR on \
     Pro iPhones, the camera height and tilt, the pixel scale, and per-region area, volume and heights. These are \
     physical measurements; prefer them over visual impressions. A region usually holds a whole dish (plate plus \
@@ -48,7 +50,8 @@ public enum AnalysisPrompt {
     pizza 0.55–0.75.
 
     Answer with the final JSON only. Use short plain English food names, such as "Basmati rice" or \
-    "Grilled chicken breast".
+    "Grilled chicken breast". Notes, warnings and the clarifying question are shown to the person, who never \
+    sees weights: describe amounts there in pieces, bites, cups or plain words, never in grams.
     """
 
     public static let searchTool = JSONValue.obj([
