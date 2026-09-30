@@ -89,11 +89,9 @@ private struct ScanAccessoryButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                Image(systemName: "circle.inset.filled")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Theme.leaf)
+                AIOrb(size: 22, isActive: false)
                 Text("Scan a meal")
-                    .font(.rounded(.body, weight: .semibold))
+                    .font(.rounded(.body, weight: .bold))
                     .foregroundStyle(Theme.ink)
             }
             .frame(maxWidth: .infinity)

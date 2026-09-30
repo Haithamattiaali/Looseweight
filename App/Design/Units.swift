@@ -26,11 +26,12 @@ struct MacroProgress: View {
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Theme.hairline)
-                    Capsule().fill(color)
+                    Capsule().fill(Theme.sweep(color))
                         .frame(width: proxy.size.width * CGFloat(min(max(fraction, 0), 1)))
+                        .glow(color, radius: 4)
                 }
             }
-            .frame(width: 56, height: 4)
+            .frame(width: 64, height: 6)
             Text(text)
                 .font(.caption.weight(.semibold))
                 .monospacedDigit()

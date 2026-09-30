@@ -25,6 +25,7 @@ struct LooseweightApp: App {
             RootView()
                 .environment(model)
                 .environment(\.unitsMode, model.unitsMode)
+                .preferredColorScheme(.dark)
                 .task { prepareForUITestsIfNeeded() }
         }
         .modelContainer(container)

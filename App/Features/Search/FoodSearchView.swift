@@ -23,7 +23,7 @@ struct FoodSearchView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: Theme.xs) {
                     if query.count < 2 {
                         RecentChips(recent: recent) { query = $0 }
                             .padding(.bottom, Theme.m)
@@ -31,15 +31,15 @@ struct FoodSearchView: View {
                             .font(.footnote)
                             .foregroundStyle(Theme.inkTertiary)
                     }
-                    ForEach(results) { record in
+                    ForEach(Array(results.enumerated()), id: \.element.id) { index, record in
                         resultRow(record)
-                        Hairline()
+                            .streamIn(index)
                     }
                 }
                 .padding(.horizontal, Theme.gutter)
                 .padding(.bottom, Theme.xl)
             }
-            .background { DaylightGround() }
+            .background { DaylightGround(mood: Theme.leaf, energy: 0.2) }
             .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Food, e.g. basmati rice")
             .onChange(of: query) { _, text in
                 results = text.count >= 2 ? FoodDatabase.shared.search(text, limit: 25).map(\.record) : []
@@ -74,9 +74,10 @@ struct FoodSearchView: View {
                     }
                 }
             } label: {
-                HStack {
+                HStack(spacing: Theme.s) {
+                    FoodDot(color: Theme.foodColor(for: record.name, isDrink: PortionSizes.isDrink(name: record.name, category: record.category)))
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(record.name).font(.body.weight(.medium)).foregroundStyle(Theme.ink)
+                        Text(record.name).font(.rounded(.body, weight: .semibold)).foregroundStyle(Theme.ink)
                         Text(categoryLine(record)).font(.caption).foregroundStyle(Theme.inkTertiary)
                     }
                     Spacer()
@@ -93,7 +94,8 @@ struct FoodSearchView: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(.vertical, Theme.s)
+        .padding(Theme.s)
+        .glassSurface(tint: isChosen ? Theme.foodColor(for: record.name) : nil, radius: Theme.thumbRadius)
         .scrollTransition { content, phase in
             content.opacity(phase.isIdentity ? 1 : 0.4)
         }

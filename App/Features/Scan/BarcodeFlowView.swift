@@ -40,9 +40,10 @@ struct BarcodeFlowView: View {
                     .clipShape(.rect(cornerRadius: Theme.controlRadius, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous)
-                            .strokeBorder(code == nil ? Color.white.opacity(0.85) : Theme.leaf, lineWidth: 3)
+                            .strokeBorder(code == nil ? AnyShapeStyle(Theme.aiGradient) : AnyShapeStyle(Theme.leaf), lineWidth: 3)
                             .animation(Theme.settle, value: code)
                     }
+                    .glow(code == nil ? Theme.violet : Theme.leaf, radius: 18)
                     .padding(.horizontal, Theme.m)
                     Text("Point at the barcode on the pack").font(.subheadline).foregroundStyle(Theme.inkSecondary)
                 } else {
@@ -51,7 +52,7 @@ struct BarcodeFlowView: View {
                 }
                 Spacer(minLength: 0)
             }
-            .background { DaylightGround() }
+            .background { DaylightGround(mood: Theme.honey, energy: 0.6) }
             .navigationTitle("Barcode")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -63,7 +64,7 @@ struct BarcodeFlowView: View {
     private func productCard(_ product: FoodRecord) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 14) {
-                Text(product.name).font(.rounded(.title3, weight: .bold))
+                Text(product.name).font(.rounded(.title2, weight: .heavy))
                 let serving = product.per100g.amount(forGrams: servingGrams(product))
                 Text(servingLine(product, serving: serving))
                     .font(.rounded(.caption)).foregroundStyle(.secondary)
@@ -73,7 +74,7 @@ struct BarcodeFlowView: View {
                         .monospacedDigit()
                     Stepper("Servings eaten", value: $servings, in: 0.5...20, step: 0.5).labelsHidden()
                     Spacer()
-                    Text(product.per100g.amount(forGrams: grams(product)).kcal.kcalText).font(.rounded(.title3, weight: .bold)).foregroundStyle(Theme.ink)
+                    Text(product.per100g.amount(forGrams: grams(product)).kcal.kcalText).font(.rounded(.title3, weight: .bold)).foregroundStyle(Theme.leaf)
                 }
                 if unitsMode.showsGrams {
                     GramEntryField(grams: Binding(
@@ -98,7 +99,8 @@ struct BarcodeFlowView: View {
                 Text("Data: Open Food Facts (ODbL)").font(.caption2).foregroundStyle(Theme.inkTertiary)
             }
             .padding(Theme.l)
-            .modifier(ControlGlass(tint: nil, shape: RoundedRectangle(cornerRadius: Theme.sheetRadius, style: .continuous)))
+            .modifier(ControlGlass(tint: Theme.honey, shape: RoundedRectangle(cornerRadius: Theme.sheetRadius, style: .continuous)))
+            .streamIn(0)
         }
         .padding(Theme.m)
         .transition(.move(edge: .bottom).combined(with: .opacity))

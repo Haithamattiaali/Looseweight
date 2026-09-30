@@ -29,15 +29,24 @@ struct ProgressScreen: View {
                 VStack(alignment: .leading, spacing: Theme.xl) {
                     WeightHeader(trend: trend)
                     WeightChart(weights: weights, trend: trend, goal: model.profile?.goalWeightKg)
+                        .padding(Theme.m)
+                        .glassSurface()
+                        .streamIn(0)
                     WeekPlates(meals: meals, target: targets?.kcal ?? 2_000)
+                        .padding(Theme.m)
+                        .glassSurface()
+                        .streamIn(1)
                     stats(targets: targets)
+                        .padding(.horizontal, Theme.m)
+                        .glassSurface()
+                        .streamIn(2)
                     explanation
                 }
                 .padding(.horizontal, Theme.gutter)
                 .padding(.bottom, Theme.xxl)
             }
             .scrollEdgeEffectStyle(.soft, for: .top)
-            .background { DaylightGround() }
+            .background { DaylightGround(mood: Theme.cyan) }
             .navigationTitle("Progress")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -75,7 +84,7 @@ struct ProgressScreen: View {
 
     private var explanation: some View {
         VStack(alignment: .leading, spacing: Theme.xs) {
-            LabelText("How your target adapts")
+            LabelText("How your target adapts", color: Theme.violet)
             if let maintenance, maintenance.source == .blended {
                 Text("From \(maintenance.loggedDays) logged days and your weight trend, you burn about \(Int(maintenance.kcal)) kcal a day. Your target follows this real number (\(Int(maintenance.dataWeight * 100))% based on your data).")
                     .font(.footnote).foregroundStyle(Theme.inkSecondary)
@@ -95,7 +104,7 @@ private struct StatRow: View {
         HStack {
             Text(title).font(.body).foregroundStyle(Theme.inkSecondary)
             Spacer()
-            Text(value).font(.body.weight(.semibold)).monospacedDigit().foregroundStyle(Theme.ink)
+            Text(value).font(.rounded(.body, weight: .bold)).monospacedDigit().foregroundStyle(Theme.cyan)
         }
         .padding(.vertical, Theme.s)
         .accessibilityElement(children: .combine)
@@ -112,9 +121,10 @@ private struct WeightHeader: View {
             HStack(alignment: .firstTextBaseline, spacing: Theme.xs) {
                 Text(trend.last.map { $0.kg.oneDecimal } ?? "—")
                     .font(.display)
-                    .tracking(-1)
+                    .tracking(-2)
                     .monospacedDigit()
-                    .foregroundStyle(Theme.ink)
+                    .foregroundStyle(LinearGradient(colors: [Theme.ink, Theme.cyan], startPoint: .top, endPoint: .bottom))
+                    .glow(Theme.cyan, radius: 18)
                 LabelText("kg")
                 if let weekly {
                     Text(String(format: "%@%.1f this week", weekly <= 0 ? "↓" : "↑", abs(weekly)))
@@ -165,18 +175,18 @@ private struct WeightChart: View {
         Chart {
             ForEach(trend, id: \.date) { point in
                 AreaMark(x: .value("Date", point.date), yStart: .value("Base", yDomain.lowerBound), yEnd: .value("Trend", point.kg))
-                    .foregroundStyle(LinearGradient(colors: [Theme.leaf.opacity(0.25), Theme.leaf.opacity(0)], startPoint: .top, endPoint: .bottom))
+                    .foregroundStyle(LinearGradient(colors: [Theme.cyan.opacity(0.45), Theme.violet.opacity(0.15), .clear], startPoint: .top, endPoint: .bottom))
                     .interpolationMethod(.catmullRom)
             }
             ForEach(trend, id: \.date) { point in
                 LineMark(x: .value("Date", point.date), y: .value("Trend", point.kg))
-                    .foregroundStyle(Theme.leaf)
-                    .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .foregroundStyle(LinearGradient(colors: [Theme.magenta, Theme.cyan, Theme.leaf], startPoint: .leading, endPoint: .trailing))
+                    .lineStyle(StrokeStyle(lineWidth: 4, lineCap: .round))
                     .interpolationMethod(.catmullRom)
             }
             ForEach(weights) { weight in
                 PointMark(x: .value("Date", weight.date), y: .value("Weight", weight.kg))
-                    .foregroundStyle(Theme.ink.opacity(0.25))
+                    .foregroundStyle(Theme.ink.opacity(0.35))
                     .symbolSize(24)
             }
             if let goal {
@@ -230,7 +240,7 @@ private struct WeekPlates: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.m) {
-            LabelText("This week")
+            LabelText("This week", color: Theme.leaf)
             HStack(spacing: 0) {
                 ForEach(days, id: \.self) { day in
                     dayButton(day)
@@ -283,10 +293,9 @@ private struct DayDetail: View {
             if meals.isEmpty {
                 Text("Nothing logged").font(.footnote).foregroundStyle(Theme.inkTertiary)
             } else {
-                VStack(spacing: 0) {
+                VStack(spacing: Theme.xs) {
                     ForEach(meals) { meal in
                         MealRow(meal: meal)
-                        Hairline()
                     }
                 }
             }

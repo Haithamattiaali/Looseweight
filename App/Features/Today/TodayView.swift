@@ -58,7 +58,7 @@ struct TodayView: View {
                 scrollOffset = offset
             }
             .scrollEdgeEffectStyle(.soft, for: .top)
-            .background { DaylightGround() }
+            .background { DaylightGround(mood: eaten.kcal > target ? Theme.ember : nil) }
             .navigationTitle("Today")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbar }
@@ -114,7 +114,7 @@ struct TodayView: View {
             .opacity(reduceMotion ? 1 - Double(dock) : 1 - Double(dock) * 0.6)
             .accessibilityIdentifier("calorieRing")
             Text("\(Int(eaten.kcal.rounded())) eaten · \(Int(target.rounded())) target")
-                .font(.footnote)
+                .font(.rounded(.subheadline, weight: .semibold))
                 .monospacedDigit()
                 .foregroundStyle(Theme.inkSecondary)
                 .contentTransition(.numericText(value: eaten.kcal))
@@ -135,10 +135,10 @@ private struct EmptyPlateNumber: View {
     var body: some View {
         VStack(spacing: 2) {
             Text(Int(target.rounded()), format: .number)
-                .font(.system(size: 64, weight: .semibold, design: .rounded))
-                .tracking(-2)
+                .font(.system(size: 64, weight: .heavy, design: .rounded))
+                .tracking(-3)
                 .monospacedDigit()
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(LinearGradient(colors: [Theme.ink, Theme.leaf], startPoint: .top, endPoint: .bottom))
             LabelText("kcal left")
         }
         .accessibilityHidden(true)
@@ -163,9 +163,12 @@ private struct EmptyDay: View {
 
     var body: some View {
         VStack(spacing: Theme.s) {
+            AIOrb(size: 64, isActive: false)
+                .padding(.bottom, Theme.xs)
             Text("Snap your first meal")
-                .font(.title2.weight(.semibold))
+                .font(.screenTitle)
                 .foregroundStyle(Theme.ink)
+                .multilineTextAlignment(.center)
             Text("Hold the phone flat above the plate. The iPhone measures the food in 3D, then the AI names it and counts the calories.")
                 .font(.body)
                 .foregroundStyle(Theme.inkSecondary)
@@ -178,10 +181,13 @@ private struct EmptyDay: View {
             .buttonStyle(.glassProminent)
             .tint(Theme.leaf)
             .controlSize(.large)
+            .glow(Theme.leaf, radius: 16)
             .padding(.top, Theme.xs)
             .accessibilityIdentifier("scanFirstMeal")
         }
+        .padding(Theme.l)
         .frame(maxWidth: .infinity)
+        .glassSurface()
     }
 }
 
@@ -210,7 +216,10 @@ private struct MealGroup: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.xs) {
             HStack(spacing: Theme.xs) {
-                LabelText(type.title)
+                Image(systemName: type.systemImage)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Theme.foodColor(for: type.title))
+                LabelText(type.title, color: Theme.foodColor(for: type.title))
                 if let first = meals.first {
                     Text(first.date, format: .dateTime.hour().minute())
                         .font(.caption)
@@ -232,7 +241,6 @@ private struct MealGroup: View {
                             Label("Delete", systemImage: "trash")
                         }
                     }
-                Hairline()
             }
         }
     }
@@ -246,7 +254,7 @@ struct MealRow: View {
             thumbnail
             VStack(alignment: .leading, spacing: 2) {
                 Text(meal.title)
-                    .font(.headline)
+                    .font(.rounded(.headline, weight: .bold))
                     .foregroundStyle(Theme.ink)
                     .lineLimit(2)
                 Text(meal.items.map(\.name).joined(separator: ", "))
@@ -258,9 +266,10 @@ struct MealRow: View {
             Text(Int(meal.total.kcal.rounded()), format: .number)
                 .font(.numeric)
                 .monospacedDigit()
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(Theme.foodColor(for: meal.title))
         }
-        .padding(.vertical, Theme.xs)
+        .padding(Theme.s)
+        .glassSurface(radius: Theme.controlRadius)
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
     }

@@ -1,7 +1,7 @@
 import LooseweightKit
 import SwiftUI
 
-/// "Drawing the plate": one outline at the top that gains information with every step.
+/// Onboarding over the living aurora: the AI orb glows behind a plate that gains colour with every step.
 struct OnboardingView: View {
     var isEditing = false
 
@@ -22,6 +22,8 @@ struct OnboardingView: View {
 
     private var problems: [EnergyModel.ProfileProblem] { EnergyModel.validate(draft) }
 
+    private static let moods: [Color] = [Theme.violet, Theme.cyan, Theme.magenta, Theme.honey, Theme.leaf]
+
     /// Welcome, how you count food, about you, goal, plan.
     private let lastPage = 4
     /// The plate drawing has four stages; the counting step keeps the welcome stage.
@@ -29,9 +31,10 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
-            DaylightGround()
+            DaylightGround(mood: Self.moods[min(page, Self.moods.count - 1)], energy: 0.6)
             VStack(spacing: Theme.l) {
                 OnboardingPlate(step: plateStep, pace: pace)
+                    .background { AIOrb(size: 150, isActive: page == 0).opacity(page == 0 ? 0.9 : 0.35) }
                     .frame(width: page == lastPage ? 140 : 120, height: page == lastPage ? 140 : 120)
                     .padding(.top, Theme.l)
                     .animation(Theme.settle, value: page)
@@ -99,6 +102,7 @@ struct OnboardingView: View {
                 .buttonStyle(.glassProminent)
                 .tint(Theme.leaf)
                 .controlSize(.large)
+                .glow(Theme.leaf, radius: 14)
                 .disabled(page == 3 && !problems.isEmpty)
                 .accessibilityIdentifier("onboardingContinue")
             }
@@ -134,7 +138,7 @@ private struct OnboardingPlate: View {
         ZStack {
             Circle()
                 .trim(from: 0, to: drawn)
-                .stroke(Theme.ink.opacity(0.7), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                .stroke(AngularGradient(colors: Theme.aiColors, center: .center), style: StrokeStyle(lineWidth: 2, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             if step >= 1 {
                 PlateRim(
@@ -146,8 +150,9 @@ private struct OnboardingPlate: View {
             }
             if step >= 3 {
                 Circle()
-                    .fill(Theme.leaf.opacity(0.22))
+                    .fill(LinearGradient(colors: [Theme.cyan.opacity(0.5), Theme.leaf.opacity(0.6)], startPoint: .bottom, endPoint: .top))
                     .padding(rimWidth + 14)
+                    .glow(Theme.leaf, radius: 18)
                     .transition(.scale.combined(with: .opacity))
             }
         }
@@ -172,7 +177,7 @@ private struct PageDots: View {
         HStack(spacing: 6) {
             ForEach(0..<count, id: \.self) { index in
                 Capsule()
-                    .fill(index == current ? Theme.ink : Theme.hairline)
+                    .fill(index == current ? AnyShapeStyle(Theme.aiGradient) : AnyShapeStyle(Theme.hairline))
                     .frame(width: index == current ? 18 : 6, height: 6)
             }
         }
@@ -189,15 +194,18 @@ private struct CountingStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.l) {
             Text("Count food the way you eat it")
-                .font(.title2.weight(.semibold))
+                .font(.screenTitle)
                 .foregroundStyle(Theme.ink)
             VStack(alignment: .leading, spacing: Theme.m) {
-                row("fork.knife", "Bites", "Rice, pasta, salad: \"about 7 bites\".")
-                row("cup.and.saucer", "Sips", "Juice, milk, coffee: \"5 sips\".")
-                row("circle.grid.2x2", "Pieces", "Nuggets, dates, cherry tomatoes: \"6 pieces\".")
-                row("chart.pie", "A share of it", "One chicken breast or sandwich: \"2/3 of the piece\".")
-                row("square.stack", "Servings", "Packaged or searched food: \"1½ servings\".")
+                row("fork.knife", "Bites", "Rice, pasta, salad: \"about 7 bites\".", Theme.honey)
+                row("cup.and.saucer", "Sips", "Juice, milk, coffee: \"5 sips\".", Theme.cyan)
+                row("wineglass", "Glasses, cans, mugs", "A whole drink: \"1 glass\", \"1 can\".", Theme.fat)
+                row("circle.grid.2x2", "Pieces", "Nuggets, dates, cherry tomatoes: \"6 pieces\".", Theme.coral)
+                row("chart.pie", "A share of it", "One chicken breast or sandwich: \"2/3 of the piece\".", Theme.magenta)
+                row("square.stack", "Servings", "Packaged or searched food: \"1½ servings\".", Theme.leaf)
             }
+            .padding(Theme.m)
+            .glassSurface()
             Text("Protein, carbs and fat show as progress towards your day, not numbers to add up.")
                 .font(.footnote)
                 .foregroundStyle(Theme.inkSecondary)
@@ -205,14 +213,14 @@ private struct CountingStep: View {
         .accessibilityIdentifier("countingStep")
     }
 
-    private func row(_ icon: String, _ title: String, _ example: String) -> some View {
+    private func row(_ icon: String, _ title: String, _ example: String, _ color: Color) -> some View {
         Label {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.headline).foregroundStyle(Theme.ink)
+                Text(title).font(.rounded(.headline, weight: .bold)).foregroundStyle(Theme.ink)
                 Text(example).font(.subheadline).foregroundStyle(Theme.inkSecondary)
             }
         } icon: {
-            Image(systemName: icon).foregroundStyle(Theme.leaf)
+            Image(systemName: icon).foregroundStyle(color).glow(color, radius: 6)
         }
     }
 }
@@ -221,23 +229,23 @@ private struct WelcomeStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.l) {
             Text("Lose weight by just taking a photo")
-                .font(.system(size: 40, weight: .semibold, design: .rounded))
-                .tracking(-1)
-                .foregroundStyle(Theme.ink)
+                .font(.system(size: 44, weight: .heavy, design: .rounded))
+                .tracking(-1.5)
+                .foregroundStyle(LinearGradient(colors: [Theme.ink, Theme.cyan, Theme.magenta], startPoint: .topLeading, endPoint: .bottomTrailing))
             VStack(alignment: .leading, spacing: Theme.m) {
-                point("cube.transparent", "Your iPhone measures the food in 3D with its camera and LiDAR.")
-                point("sparkles", "Claude AI names each food and works out how much is there.")
-                point("checkmark.seal", "Calories come from the USDA food database, not from guesses.")
-                point("chart.line.downtrend.xyaxis", "Your daily target learns how much you really burn.")
+                point("cube.transparent", "Your iPhone measures the food in 3D with its camera and LiDAR.", Theme.cyan)
+                point("sparkles", "Claude AI names each food and drink and works out how much is there.", Theme.violet)
+                point("checkmark.seal", "Calories come from the USDA food database, not from guesses.", Theme.leaf)
+                point("chart.line.downtrend.xyaxis", "Your daily target learns how much you really burn.", Theme.magenta)
             }
         }
     }
 
-    private func point(_ icon: String, _ text: String) -> some View {
+    private func point(_ icon: String, _ text: String, _ color: Color) -> some View {
         Label {
-            Text(text).font(.body).foregroundStyle(Theme.inkSecondary)
+            Text(text).font(.body.weight(.medium)).foregroundStyle(Theme.inkSecondary)
         } icon: {
-            Image(systemName: icon).foregroundStyle(Theme.leaf)
+            Image(systemName: icon).foregroundStyle(color).glow(color, radius: 6)
         }
     }
 }
@@ -255,7 +263,7 @@ private struct AboutYouStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.l) {
             Text("About you")
-                .font(.title2.weight(.semibold))
+                .font(.screenTitle)
                 .foregroundStyle(Theme.ink)
             SexPicker(sex: $sex)
             HStack(spacing: 0) {
@@ -315,7 +323,7 @@ private struct SexPicker: View {
                 .frame(height: 52)
         }
         .buttonStyle(.plain)
-        .glassEffect(isOn ? .regular.tint(Theme.leaf.opacity(0.35)).interactive() : .regular.interactive(), in: .capsule)
+        .glassEffect(isOn ? .regular.tint(Theme.leaf.opacity(0.45)).interactive() : .regular.interactive(), in: .capsule)
         .glassEffectID(value == .female ? "female" : "male", in: glass)
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
@@ -332,7 +340,7 @@ private struct GoalStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.l) {
             Text("Your goal")
-                .font(.title2.weight(.semibold))
+                .font(.screenTitle)
                 .foregroundStyle(Theme.ink)
             VStack(spacing: 0) {
                 LabelText("Goal weight kg")
@@ -385,7 +393,7 @@ private struct GoalStep: View {
                 .frame(height: 44)
         }
         .buttonStyle(.plain)
-        .glassEffect(isOn ? .regular.tint(Theme.leaf.opacity(0.35)).interactive() : .regular.interactive(), in: .capsule)
+        .glassEffect(isOn ? .regular.tint(Theme.leaf.opacity(0.45)).interactive() : .regular.interactive(), in: .capsule)
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }
@@ -402,16 +410,17 @@ private struct PlanStep: View {
         let days = EnergyModel.daysToGoal(currentKg: draft.weightKg, goalKg: draft.goalWeightKg, dailyDeficitKcal: deficit)
         VStack(alignment: .leading, spacing: Theme.l) {
             Text("Your daily plan")
-                .font(.title2.weight(.semibold))
+                .font(.screenTitle)
                 .foregroundStyle(Theme.ink)
             VStack(alignment: .leading, spacing: 0) {
                 Text("\(Int(shown))")
                     .font(.hero)
-                    .tracking(-2)
+                    .tracking(-3)
                     .monospacedDigit()
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)
-                    .foregroundStyle(Theme.ink)
+                    .foregroundStyle(LinearGradient(colors: [Theme.ink, Theme.leaf], startPoint: .top, endPoint: .bottom))
+                    .glow(Theme.leaf, radius: 20)
                     .contentTransition(.numericText(value: shown))
                     .accessibilityLabel("\(Int(targets.kcal)) kcal a day")
                     .accessibilityIdentifier("planTarget")
@@ -422,6 +431,9 @@ private struct PlanStep: View {
                 macro("Carbs", targets.carbsG, 4, targets.kcal, Theme.carbs)
                 macro("Fat", targets.fatG, 9, targets.kcal, Theme.fat)
             }
+            .padding(Theme.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassSurface()
             Text("You burn about \(Int(targets.maintenanceKcal)) kcal a day." + (days.map { " At this pace you reach \(draft.goalWeightKg.oneDecimal) kg in about \(max($0 / 7, 1)) weeks." } ?? ""))
                 .font(.body)
                 .foregroundStyle(Theme.inkSecondary)
@@ -444,7 +456,7 @@ private struct PlanStep: View {
             LabelText(title, color: color)
             Text(AmountFormatter(mode: unitsMode).macroTarget(grams: grams, kcalPerGram: kcalPerGram, dailyKcal: dailyKcal))
                 .font(.numeric)
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(color)
         }
     }
 }

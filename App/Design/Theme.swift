@@ -1,23 +1,50 @@
 import SwiftUI
 import UIKit
 
-/// Design tokens for "The Plate". One accent (leaf) marks room left; ember marks over.
+/// Design tokens for "Aurora": dark-first, saturated colour, glass floating over light. Leaf (mint) marks room
+/// left and go; ember (hot coral) marks over; every food and macro has its own vivid colour.
 enum Theme {
     // MARK: Palette
 
-    static let ground = Color(light: 0xF6F4EF, dark: 0x0B0C0B)
-    static let groundRaised = Color(light: 0xFFFFFF, dark: 0x151715)
-    static let ink = Color(light: 0x111311, dark: 0xF3F2EE)
-    static let inkSecondary = Color(light: 0x111311, dark: 0xF3F2EE, lightAlpha: 0.60, darkAlpha: 0.62)
-    static let inkTertiary = Color(light: 0x111311, dark: 0xF3F2EE, lightAlpha: 0.36, darkAlpha: 0.40)
-    static let hairline = Color(light: 0x111311, dark: 0xF3F2EE, lightAlpha: 0.08, darkAlpha: 0.12)
+    static let ground = Color(light: 0xF3F0FF, dark: 0x07060F)
+    static let groundRaised = Color(light: 0xFFFFFF, dark: 0x16132B)
+    static let ink = Color(light: 0x0E0B1F, dark: 0xFFFFFF)
+    static let inkSecondary = Color(light: 0x0E0B1F, dark: 0xFFFFFF, lightAlpha: 0.64, darkAlpha: 0.72)
+    static let inkTertiary = Color(light: 0x0E0B1F, dark: 0xFFFFFF, lightAlpha: 0.40, darkAlpha: 0.46)
+    static let hairline = Color(light: 0x0E0B1F, dark: 0xFFFFFF, lightAlpha: 0.10, darkAlpha: 0.14)
 
-    static let leaf = Color(light: 0x1F9D6B, dark: 0x3CCB8C)
-    static let ember = Color(light: 0xE4572E, dark: 0xFF7A52)
-    static let honey = Color(light: 0xE9A23B, dark: 0xF4B654)
-    static let protein = Color(light: 0xD9486A, dark: 0xF0708D)
+    static let leaf = Color(light: 0x00A67E, dark: 0x2EF2B0)
+    static let ember = Color(light: 0xF0265E, dark: 0xFF5C86)
+    static let honey = Color(light: 0xF08C00, dark: 0xFFC23D)
+    static let protein = Color(light: 0xE8267A, dark: 0xFF5FA2)
     static let carbs = honey
-    static let fat = Color(light: 0x4C7BE0, dark: 0x7FA3F5)
+    static let fat = Color(light: 0x2F6BFF, dark: 0x5AA2FF)
+
+    static let violet = Color(light: 0x5B3DF5, dark: 0x8B6CFF)
+    static let cyan = Color(light: 0x0096C7, dark: 0x22E1FF)
+    static let magenta = Color(light: 0xC23BE8, dark: 0xFF5CF4)
+    static let coral = Color(light: 0xF2545B, dark: 0xFF7A6B)
+    static let lime = Color(light: 0x6BAF00, dark: 0xB6F35A)
+
+    /// The AI's colours: the orb, the scanning light, suggestions.
+    static let aiColors: [Color] = [violet, cyan, leaf, magenta, violet]
+    static var aiGradient: LinearGradient {
+        LinearGradient(colors: [violet, magenta, cyan], startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    /// Vivid per-food colours; a food keeps its colour on every screen (stable hash of the name).
+    static let foodPalette: [Color] = [coral, honey, lime, leaf, cyan, fat, violet, magenta]
+
+    static func foodColor(for name: String, isDrink: Bool = false) -> Color {
+        if isDrink { return cyan }
+        let sum = name.lowercased().unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0xFFFF }
+        return foodPalette[sum % foodPalette.count]
+    }
+
+    /// A lighter-to-full sweep of one colour, for bars, arcs and slider fills.
+    static func sweep(_ color: Color) -> LinearGradient {
+        LinearGradient(colors: [color.opacity(0.55), color], startPoint: .leading, endPoint: .trailing)
+    }
 
     // MARK: Spacing (4 pt base)
 
@@ -72,12 +99,14 @@ extension Font {
         .system(style, design: .rounded, weight: weight)
     }
 
-    /// 88 pt rounded: kcal left on Today, total on Review.
-    static let hero = Font.system(size: 88, weight: .semibold, design: .rounded)
-    /// 56 pt rounded: plan target, weight.
-    static let display = Font.system(size: 56, weight: .semibold, design: .rounded)
+    /// 96 pt heavy rounded: kcal left on Today, total on Review and Plan.
+    static let hero = Font.system(size: 96, weight: .heavy, design: .rounded)
+    /// 60 pt bold rounded: plan target, weight.
+    static let display = Font.system(size: 60, weight: .bold, design: .rounded)
+    /// Big confident screen titles.
+    static let screenTitle = Font.system(size: 34, weight: .heavy, design: .rounded)
     /// Row numbers.
-    static let numeric = Font.system(.title3, design: .rounded, weight: .semibold)
+    static let numeric = Font.system(.title3, design: .rounded, weight: .bold)
     /// Tiny expanded all-caps voice.
     static let label = Font.system(size: 11, weight: .semibold).width(.expanded)
 }

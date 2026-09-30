@@ -175,8 +175,8 @@ private struct IntentChooser: View {
                     .foregroundStyle(Theme.inkSecondary)
                 GlassEffectContainer(spacing: 20) {
                     HStack(spacing: Theme.s) {
-                        choice(.log, title: "Log", subtitle: "What I ate", icon: "checkmark.circle", id: "logChoice")
-                        choice(.plan, title: "Plan", subtitle: "What I'm about to eat", icon: "fork.knife", id: "planChoice")
+                        choice(.log, title: "Log", subtitle: "What I ate", icon: "checkmark.circle", tint: Theme.leaf, id: "logChoice")
+                        choice(.plan, title: "Plan", subtitle: "What I'm about to eat", icon: "fork.knife", tint: Theme.violet, id: "planChoice")
                     }
                 }
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -186,15 +186,17 @@ private struct IntentChooser: View {
         .sensoryFeedback(.selection, trigger: intent)
     }
 
-    private func choice(_ value: MealIntent, title: String, subtitle: String, icon: String, id: String) -> some View {
+    private func choice(_ value: MealIntent, title: String, subtitle: String, icon: String, tint: Color, id: String) -> some View {
         Button {
             onChoose(value)
         } label: {
             VStack(spacing: 4) {
                 Image(systemName: icon)
-                    .font(.title3.weight(.semibold))
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(tint)
+                    .glow(tint, radius: 8)
                 Text(title)
-                    .font(.rounded(.headline, weight: .semibold))
+                    .font(.rounded(.title3, weight: .heavy))
                 Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(Theme.inkSecondary)
@@ -202,9 +204,10 @@ private struct IntentChooser: View {
                     .minimumScaleFactor(0.8)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, Theme.s)
+            .padding(.vertical, Theme.m)
         }
         .buttonStyle(.glass)
+        .tint(tint.opacity(0.4))
         .accessibilityLabel("\(title): \(subtitle)")
         .accessibilityIdentifier(id)
     }
@@ -517,7 +520,7 @@ private struct ShutterButton: View {
         Button(action: action) {
             ZStack {
                 Circle()
-                    .fill(.white.opacity(0.92))
+                    .fill(ready ? AnyShapeStyle(LinearGradient(colors: [.white, Theme.leaf.opacity(0.5)], startPoint: .top, endPoint: .bottom)) : AnyShapeStyle(Color.white.opacity(0.92)))
                     .frame(width: 66, height: 66)
                     .scaleEffect(ready || reduceMotion ? 1 : 0.92)
                     .animation(Theme.settle, value: ready)
@@ -528,6 +531,7 @@ private struct ShutterButton: View {
         .buttonStyle(.glassProminent)
         .buttonBorderShape(.circle)
         .tint(ready ? Theme.leaf : .gray)
+        .glow(ready ? Theme.leaf : .clear, radius: 18)
         .disabled(isCapturing || blocked)
         .opacity(blocked ? 0.45 : 1)
         .accessibilityIdentifier("shutter")
@@ -542,9 +546,11 @@ private struct SweepRing: View {
     var body: some View {
         Circle()
             .trim(from: 0, to: progress)
-            .stroke(Theme.leaf, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+            .stroke(AngularGradient(colors: Theme.aiColors, center: .center), style: StrokeStyle(lineWidth: 6, lineCap: .round))
             .rotationEffect(.degrees(-90))
             .frame(width: 96, height: 96)
+            .background { AIOrb(size: 64) }
+            .glow(Theme.cyan, radius: 16)
             .animation(.linear(duration: 0.2), value: progress)
             .allowsHitTesting(false)
             .accessibilityLabel("Capturing more angles")
@@ -563,11 +569,11 @@ private struct CaptureFrame: View {
             let inset: CGFloat = ready ? 22 : 16
             let rect = CGRect(x: inset, y: 110, width: proxy.size.width - inset * 2, height: max(proxy.size.height - 320, 100))
             ZStack(alignment: .top) {
-                CaptureBrackets(length: ready ? 40 : 32)
-                    .stroke(notFood ? Theme.honey : (ready ? Theme.leaf : Color.white.opacity(0.85)), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+                CaptureBrackets(length: ready ? 44 : 32)
+                    .stroke(bracketStyle, style: StrokeStyle(lineWidth: ready ? 5 : 4, lineCap: .round, lineJoin: .round))
                     .frame(width: rect.width, height: rect.height)
                     .position(x: rect.midX, y: rect.midY)
-                    .shadow(color: .black.opacity(0.3), radius: 6)
+                    .shadow(color: notFood ? Theme.honey.opacity(0.6) : (ready ? Theme.leaf.opacity(0.7) : .black.opacity(0.3)), radius: ready ? 12 : 6)
                 if showsHint {
                     GlassPill {
                         Text("Fit every plate and side inside the frame")
@@ -582,6 +588,13 @@ private struct CaptureFrame: View {
         .animation(Theme.settle, value: notFood)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+
+    /// White while aligning, the AI's mint-to-cyan light when ready, amber when not on food.
+    private var bracketStyle: AnyShapeStyle {
+        if notFood { return AnyShapeStyle(Theme.honey) }
+        if ready { return AnyShapeStyle(LinearGradient(colors: [Theme.leaf, Theme.cyan, Theme.violet], startPoint: .topLeading, endPoint: .bottomTrailing)) }
+        return AnyShapeStyle(Color.white.opacity(0.85))
     }
 }
 

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The day as a plate: a disc that fills like liquid as you eat, with three macro arcs on the rim.
+/// The day as a glowing disc of colour that fills like liquid as you eat, with three vivid macro arcs on the rim.
 struct PlateView: View {
     enum Style {
         /// Today: 300 pt, hero number inside.
@@ -64,15 +64,20 @@ struct PlateView: View {
 
     private func disc(rim: CGFloat) -> some View {
         ZStack {
-            Circle().fill(Theme.hairline.opacity(style == .outline ? 0 : 0.5))
+            Circle().fill(RadialGradient(colors: [Theme.violet.opacity(style == .outline ? 0.12 : 0.3), Theme.ground.opacity(0.2)],
+                                         center: .center, startRadius: 0, endRadius: 180))
             if style != .outline {
                 LiquidShape(level: min(fraction, 1))
-                    .fill(liquid.opacity(style == .compact ? 0.55 : 0.22))
+                    .fill(LinearGradient(colors: (isOver ? [Theme.ember, Theme.magenta] : [Theme.cyan, Theme.leaf]).map { $0.opacity(style == .compact ? 0.8 : 0.5) },
+                                         startPoint: .bottom, endPoint: .top))
                     .animation(reduceMotion ? nil : Theme.fill, value: fraction)
             }
         }
         .clipShape(Circle())
+        .overlay(Circle().strokeBorder(.white.opacity(0.12), lineWidth: 1))
+        .glassEffect(.clear, in: Circle())
         .padding(rim * 1.6)
+        .shadow(color: liquid.opacity(0.35), radius: style == .compact ? 2 : 30)
     }
 
     private func centre(side: CGFloat) -> some View {
@@ -90,10 +95,10 @@ struct PlateView: View {
 
     private func heroNumber(_ value: Int, size: CGFloat) -> some View {
         Text(value, format: .number)
-            .font(.system(size: size, weight: .semibold, design: .rounded))
-            .tracking(-2)
+            .font(.system(size: size, weight: .heavy, design: .rounded))
+            .tracking(-3)
             .monospacedDigit()
-            .foregroundStyle(Theme.ink)
+            .foregroundStyle(LinearGradient(colors: [Theme.ink, isOver ? Theme.ember : Theme.leaf], startPoint: .top, endPoint: .bottom))
             .contentTransition(.numericText(value: Double(value)))
             .lineLimit(1)
     }
@@ -133,8 +138,11 @@ struct PlateRim: View {
         let end = start + (segment - gap) * progress
         return Circle()
             .trim(from: start, to: max(start, end))
-            .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
+            .stroke(AngularGradient(colors: [color.opacity(0.6), color], center: .center,
+                                    startAngle: .degrees(360 * start), endAngle: .degrees(360 * (start + segment))),
+                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
             .rotationEffect(.degrees(-90))
+            .shadow(color: color.opacity(0.7), radius: lineWidth)
             .animation(reduceMotion ? nil : Theme.fill, value: progress)
     }
 }

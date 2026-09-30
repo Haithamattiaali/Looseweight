@@ -46,7 +46,7 @@ struct ControlGlass<S: Shape>: ViewModifier {
 
     private var glass: Glass {
         var glass = Glass.regular
-        if let tint { glass = glass.tint(tint.opacity(0.35)) }
+        if let tint { glass = glass.tint(tint.opacity(0.28)) }
         if interactive { glass = glass.interactive() }
         return glass
     }

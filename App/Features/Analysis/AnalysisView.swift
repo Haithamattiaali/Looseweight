@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// "The plate reads": the captured photo with a light sweeping around it while the steps tick through.
+/// "The AI reads the plate": the full captured photo under a breathing AI orb and rising sparks, an aurora light
+/// travelling around its edge, and the steps streaming in as they finish.
 struct AnalysisView: View {
     let meal: CapturedMeal
     let flow: AnalysisFlow
@@ -12,7 +13,7 @@ struct AnalysisView: View {
 
     var body: some View {
         ZStack {
-            DaylightGround()
+            DaylightGround(mood: isRunning ? Theme.violet : Theme.leaf, energy: isRunning ? 1 : 0.5)
             ScrollView {
                 VStack(spacing: Theme.xl) {
                     ReadingPhoto(image: meal.image, isRunning: isRunning, sourceTitle: sourceTitle, sourceIcon: sourceIcon)
@@ -32,11 +33,14 @@ struct AnalysisView: View {
 
     private var stepList: some View {
         VStack(alignment: .leading, spacing: Theme.m) {
-            ForEach(flow.steps) { step in
+            ForEach(Array(flow.steps.enumerated()), id: \.element.id) { index, step in
                 StepRow(step: step)
+                    .streamIn(index)
             }
         }
+        .padding(Theme.m)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .glassSurface()
         .accessibilityIdentifier("analysisSteps")
     }
 
@@ -69,8 +73,11 @@ private struct ReadingPhoto: View {
             .scaledToFill()
             .frame(height: 320)
             .frame(maxWidth: .infinity)
+            .overlay { aiPresence }
             .clipShape(.rect(cornerRadius: Theme.controlRadius, style: .continuous))
+            .shimmer(isRunning)
             .overlay { sweep }
+            .glow(isRunning ? Theme.violet : Theme.leaf, radius: 24)
             .overlay(alignment: .topLeading) {
                 GlassPill {
                     Label(sourceTitle, systemImage: sourceIcon)
@@ -78,6 +85,20 @@ private struct ReadingPhoto: View {
                 }
                 .padding(Theme.s)
             }
+    }
+
+    /// While the AI works: a veil of colour, rising sparks and the breathing orb over the (never cropped) photo.
+    @ViewBuilder
+    private var aiPresence: some View {
+        if isRunning {
+            ZStack {
+                LinearGradient(colors: [Theme.violet.opacity(0.35), .clear, Theme.magenta.opacity(0.3)], startPoint: .top, endPoint: .bottom)
+                SparkleField(count: 34)
+                AIOrb(size: 96)
+            }
+            .allowsHitTesting(false)
+            .transition(.opacity)
+        }
     }
 
     @ViewBuilder
@@ -89,7 +110,7 @@ private struct ReadingPhoto: View {
                 RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous)
                     .strokeBorder(
                         AngularGradient(
-                            colors: [.clear, Theme.leaf.opacity(0.9), .white, Theme.leaf.opacity(0.9), .clear, .clear],
+                            colors: [.clear, Theme.violet, Theme.cyan, .white, Theme.magenta, .clear, .clear],
                             center: .center,
                             angle: angle
                         ),
@@ -185,10 +206,12 @@ private struct StepRow: View {
     private var icon: some View {
         switch step.state {
         case .running:
-            ProgressView().controlSize(.small)
+            AIOrb(size: 22)
         case .done:
-            Image(systemName: "checkmark")
+            Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(Theme.leaf)
+                .glow(Theme.leaf, radius: 6)
+                .symbolEffect(.bounce, value: step.state)
                 .transition(.scale.combined(with: .opacity))
         case .failed:
             Image(systemName: "xmark")
@@ -214,7 +237,7 @@ private struct StepTitle: View {
 
     var body: some View {
         Text(title)
-            .font(.body.weight(isRunning ? .semibold : .regular))
+            .font(.rounded(.body, weight: isRunning ? .bold : .medium))
             .foregroundStyle(isWaiting ? Theme.inkTertiary : Theme.ink)
             .phaseAnimator([false, true]) { content, dim in
                 content.opacity(isRunning && dim && !reduceMotion ? 0.45 : 1)

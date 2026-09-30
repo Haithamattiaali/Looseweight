@@ -35,6 +35,8 @@ struct PlanView: View {
                         .resizable()
                         .scaledToFit()
                         .clipShape(.rect(cornerRadius: Theme.controlRadius, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous).strokeBorder(Theme.aiGradient, lineWidth: 1.5))
+                        .glow(Theme.violet, radius: 20)
                         .frame(maxHeight: 280)
                         .accessibilityHidden(true)
                     PlanHeader(plan: plan, leftToday: leftToday, mealType: mealType)
@@ -44,7 +46,7 @@ struct PlanView: View {
                 .padding(.horizontal, Theme.gutter)
                 .padding(.bottom, Theme.xxl)
             }
-            .background { DaylightGround() }
+            .background { DaylightGround(mood: Theme.violet) }
             .navigationTitle(plan.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbar }
@@ -88,7 +90,7 @@ struct PlanView: View {
                     .symbolEffect(.bounce, value: saved)
             }
             .buttonStyle(.glassProminent)
-            .tint(Theme.leaf)
+            .tint(Theme.violet)
             .accessibilityLabel("Save plan to the Inbox")
             .accessibilityIdentifier("savePlan")
         }
@@ -106,11 +108,12 @@ private struct PlanHeader: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(Int(plan.total.kcal.rounded()), format: .number)
                     .font(.hero)
-                    .tracking(-2)
+                    .tracking(-3)
                     .monospacedDigit()
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)
-                    .foregroundStyle(Theme.ink)
+                    .foregroundStyle(LinearGradient(colors: [Theme.ink, Theme.violet], startPoint: .top, endPoint: .bottom))
+                    .glow(Theme.violet, radius: 20)
                     .contentTransition(.numericText(value: plan.total.kcal))
                     .accessibilityIdentifier("planTotal")
                 LabelText("kcal")
@@ -141,11 +144,10 @@ struct PlanList: View {
     let suggested: MealPlan
 
     var body: some View {
-        VStack(spacing: 0) {
-            Hairline()
-            ForEach($plan.portions) { $portion in
-                PlanRow(portion: $portion, suggestedGrams: suggestedGrams(portion.id))
-                Hairline()
+        VStack(spacing: Theme.s) {
+            ForEach(Array(plan.portions.enumerated()), id: \.element.id) { index, portion in
+                PlanRow(portion: $plan.portions[index], suggestedGrams: suggestedGrams(portion.id))
+                    .streamIn(index)
             }
         }
         .accessibilityIdentifier("planList")
@@ -166,18 +168,19 @@ struct PlanRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.xs) {
             header
-            UnitSlider(name: portion.name, scale: portion.unitScale, grams: $portion.plannedGrams, suggestedGrams: suggestedGrams)
+            UnitSlider(name: portion.name, scale: portion.unitScale, grams: $portion.plannedGrams, suggestedGrams: suggestedGrams, tint: color)
         }
-        .padding(.vertical, Theme.s)
+        .padding(Theme.m)
+        .glassSurface(tint: portion.isSkipped ? nil : color)
     }
+
+    private var color: Color { Theme.foodColor(for: portion.name, isDrink: portion.profile.isDrink) }
 
     private var header: some View {
         HStack(alignment: .center, spacing: Theme.s) {
-            Circle()
-                .fill(portion.isSkipped ? Theme.hairline : Theme.leaf)
-                .frame(width: 8, height: 8)
+            FoodDot(color: portion.isSkipped ? Theme.hairline : color)
             Text(portion.name)
-                .font(.headline)
+                .font(.rounded(.headline, weight: .bold))
                 .foregroundStyle(portion.isSkipped ? Theme.inkTertiary : Theme.ink)
             Spacer(minLength: Theme.xs)
             if let available = portion.availableText, !portion.isSkipped, !portion.isAll {

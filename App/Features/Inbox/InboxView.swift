@@ -21,14 +21,15 @@ struct InboxView: View {
                         EmptyInbox()
                     } else {
                         VStack(alignment: .leading, spacing: Theme.l) {
-                            LabelText("To confirm")
-                            ForEach(pending) { record in
+                            LabelText("To confirm", color: Theme.violet)
+                            ForEach(Array(pending.enumerated()), id: \.element.id) { index, record in
                                 PlannedMealCard(record: record) { confirmation in
                                     withAnimation(Theme.settle) {
                                         Store.confirm(record, as: confirmation, in: context)
                                         confirmedPulse += 1
                                     }
                                 }
+                                .streamIn(index)
                             }
                         }
                     }
@@ -40,7 +41,7 @@ struct InboxView: View {
                 .padding(.bottom, Theme.xxl)
                 .padding(.top, Theme.m)
             }
-            .background { DaylightGround() }
+            .background { DaylightGround(mood: Theme.violet) }
             .navigationTitle("Inbox")
             .navigationBarTitleDisplayMode(.inline)
             .sensoryFeedback(.success, trigger: confirmedPulse)
@@ -53,18 +54,21 @@ private struct EmptyInbox: View {
     var body: some View {
         VStack(spacing: Theme.s) {
             Image(systemName: "tray")
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(Theme.inkTertiary)
+                .font(.system(size: 44, weight: .semibold))
+                .foregroundStyle(Theme.aiGradient)
+                .glow(Theme.violet, radius: 16)
             Text("Nothing to confirm")
-                .font(.title3.weight(.semibold))
+                .font(.screenTitle)
                 .foregroundStyle(Theme.ink)
             Text("Take a photo before you eat and choose Plan. The app tells you how many bites of each food fit today, and the plan waits here until you confirm what you ate.")
                 .font(.body)
                 .foregroundStyle(Theme.inkSecondary)
                 .multilineTextAlignment(.center)
         }
+        .padding(Theme.l)
         .frame(maxWidth: .infinity)
-        .padding(.top, Theme.xxl)
+        .glassSurface()
+        .padding(.top, Theme.xl)
     }
 }
 
@@ -82,8 +86,10 @@ struct PlannedMealCard: View {
                 PlanSummaryLines(portions: plan.portions)
             }
             ConfirmButtons(choosingPart: $choosingPart, onConfirm: onConfirm)
-            Hairline()
         }
+        .padding(Theme.m)
+        .glassSurface(tint: Theme.violet)
+        .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous).strokeBorder(Theme.aiGradient, lineWidth: 1).opacity(0.6))
     }
 
     private var header: some View {
@@ -91,7 +97,7 @@ struct PlannedMealCard: View {
             PlanThumbnail(photo: record.photo, mealType: record.mealType)
             VStack(alignment: .leading, spacing: 2) {
                 Text(record.title)
-                    .font(.headline)
+                    .font(.rounded(.headline, weight: .bold))
                     .foregroundStyle(Theme.ink)
                     .lineLimit(2)
                 HStack(spacing: 6) {
@@ -107,7 +113,7 @@ struct PlannedMealCard: View {
                 Text(Int(total.rounded()), format: .number)
                     .font(.numeric)
                     .monospacedDigit()
-                    .foregroundStyle(Theme.ink)
+                    .foregroundStyle(Theme.violet)
                     .accessibilityLabel("\(Int(total.rounded())) kcal planned")
             }
         }
@@ -122,7 +128,8 @@ private struct PlanSummaryLines: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(portions) { portion in
-                HStack {
+                HStack(spacing: 6) {
+                    FoodDot(color: portion.isSkipped ? Theme.hairline : Theme.foodColor(for: portion.name, isDrink: portion.profile.isDrink), size: 6)
                     Text(portion.name)
                         .foregroundStyle(portion.isSkipped ? Theme.inkTertiary : Theme.inkSecondary)
                     Spacer()
@@ -172,6 +179,7 @@ struct ConfirmButtons: View {
         }
         .buttonStyle(.glassProminent)
         .tint(Theme.leaf)
+        .glow(Theme.leaf, radius: 10)
         .accessibilityLabel("Ate it all as planned")
         .accessibilityIdentifier("confirmAteAll")
 
@@ -237,7 +245,7 @@ private struct ConfirmedToday: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.xs) {
-            LabelText("Answered today")
+            LabelText("Answered today", color: Theme.leaf)
             ForEach(records) { record in
                 HStack {
                     Text(record.title)
@@ -253,6 +261,8 @@ private struct ConfirmedToday: View {
                 Hairline()
             }
         }
+        .padding(Theme.m)
+        .glassSurface()
     }
 }
 
@@ -267,7 +277,7 @@ struct PlanReminderSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.m) {
             Text("Did you eat your \(record.mealType.title.lowercased())?")
-                .font(.title3.weight(.semibold))
+                .font(.rounded(.title2, weight: .heavy))
                 .foregroundStyle(Theme.ink)
             Text("Your plan only counts once you confirm it.")
                 .font(.footnote)
@@ -285,5 +295,6 @@ struct PlanReminderSheet: View {
         }
         .padding(Theme.l)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background { DaylightGround(mood: Theme.violet) }
     }
 }

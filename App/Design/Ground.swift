@@ -1,18 +1,28 @@
 import SwiftUI
 
-/// The still "Daylight" ground: warm paper tinted ≤6 % by the time of day. Never animated per frame.
+/// The "Aurora" ground behind every screen: a dark base with a living 3×3 mesh of saturated colour that drifts
+/// slowly and shifts with the time of day (warm dawn, clear cyan noon, magenta dusk, violet night). A `mood`
+/// colour (the meal's lead food, or the AI while it works) pulls one corner toward it. Reduce Motion freezes it.
 struct DaylightGround: View {
+    var mood: Color?
+    /// 0 = calm (Today, Settings); 1 = alive (Scan, Analysis).
+    var energy: Double = 0.35
+
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hour = Calendar.current.component(.hour, from: Date())
 
     var body: some View {
-        MeshGradient(
-            width: 2,
-            height: 2,
-            points: [SIMD2(0, 0), SIMD2(1, 0), SIMD2(0, 1), SIMD2(1, 1)],
-            colors: colors
-        )
+        TimelineView(.animation(minimumInterval: 1 / 20, paused: reduceMotion || scenePhase != .active)) { context in
+            let t = reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate
+            ZStack {
+                Theme.ground
+                MeshGradient(width: 3, height: 3, points: points(t), colors: colors)
+                    .opacity(colorScheme == .dark ? 0.9 : 0.55)
+                LinearGradient(colors: [.clear, Theme.ground.opacity(colorScheme == .dark ? 0.55 : 0.35)], startPoint: .center, endPoint: .bottom)
+            }
+        }
         .ignoresSafeArea()
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { hour = Calendar.current.component(.hour, from: Date()) }
@@ -20,34 +30,34 @@ struct DaylightGround: View {
         .accessibilityHidden(true)
     }
 
+    private func points(_ t: Double) -> [SIMD2<Float>] {
+        let a = Float(0.06 + energy * 0.08)
+        func wobble(_ speed: Double, _ phase: Double) -> Float { Float(sin(t * speed + phase)) * a }
+        return [
+            SIMD2(0, 0), SIMD2(0.5 + wobble(0.23, 0), 0), SIMD2(1, 0),
+            SIMD2(0, 0.5 + wobble(0.19, 1)), SIMD2(0.5 + wobble(0.31, 2), 0.5 + wobble(0.27, 3)), SIMD2(1, 0.5 + wobble(0.21, 4)),
+            SIMD2(0, 1), SIMD2(0.5 + wobble(0.17, 5), 1), SIMD2(1, 1),
+        ]
+    }
+
     private var colors: [Color] {
-        let base = colorScheme == .dark ? UIColor(hex: 0x0B0C0B) : UIColor(hex: 0xF6F4EF)
-        let tint = Self.tint(hour: hour, dark: colorScheme == .dark)
-        let top = Color(uiColor: Self.blend(base, tint, 0.06))
-        let mid = Color(uiColor: Self.blend(base, tint, 0.03))
-        let plain = Color(uiColor: base)
-        return [top, mid, mid, plain]
+        let palette = Self.palette(hour: hour)
+        let base = Theme.ground
+        let lead = mood ?? palette[0]
+        return [
+            lead, palette[1].opacity(0.85), palette[2],
+            palette[2].opacity(0.55), base.opacity(0.35), lead.opacity(0.6),
+            base, palette[1].opacity(0.35), base,
+        ]
     }
 
-    private static func tint(hour: Int, dark: Bool) -> UIColor {
+    /// Three saturated colours per part of the day.
+    static func palette(hour: Int) -> [Color] {
         switch hour {
-        case 5..<10: return UIColor(hex: 0xFFE9C9)
-        case 17..<21: return UIColor(hex: 0xF5D6C8)
-        case 10..<17: return dark ? UIColor(hex: 0x1A2233) : UIColor(hex: 0xFFFFFF)
-        default: return dark ? UIColor(hex: 0x1A2233) : UIColor(hex: 0xF5D6C8)
+        case 5..<10: [Theme.honey, Theme.coral, Theme.magenta]
+        case 10..<16: [Theme.cyan, Theme.leaf, Theme.fat]
+        case 16..<21: [Theme.magenta, Theme.coral, Theme.violet]
+        default: [Theme.violet, Theme.fat, Theme.magenta]
         }
-    }
-
-    private static func blend(_ a: UIColor, _ b: UIColor, _ amount: CGFloat) -> UIColor {
-        var ar: CGFloat = 0, ag: CGFloat = 0, ab: CGFloat = 0, aa: CGFloat = 0
-        var br: CGFloat = 0, bg: CGFloat = 0, bb: CGFloat = 0, ba: CGFloat = 0
-        a.getRed(&ar, green: &ag, blue: &ab, alpha: &aa)
-        b.getRed(&br, green: &bg, blue: &bb, alpha: &ba)
-        return UIColor(
-            red: ar + (br - ar) * amount,
-            green: ag + (bg - ag) * amount,
-            blue: ab + (bb - ab) * amount,
-            alpha: 1
-        )
     }
 }

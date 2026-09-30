@@ -27,7 +27,7 @@ struct SettingsView: View {
                     }
                     Button("Edit profile and goal") { editingProfile = true }
                 } header: {
-                    LabelText("Your plan")
+                    LabelText("Your plan", color: Theme.leaf)
                 }
 
                 UnitsSection(mode: $model.unitsMode)
@@ -109,13 +109,13 @@ struct SettingsView: View {
                     Text("Nutrition data: USDA FoodData Central SR Legacy (public domain) via the TempoLife food dataset (CC-BY-4.0). Packaged food: Open Food Facts (ODbL).")
                     Text("Looseweight gives estimates to support healthy weight loss. It is not a medical device. Talk to a doctor before large diet changes, when pregnant, or with an eating disorder.")
                 } header: {
-                    LabelText("About")
+                    LabelText("About", color: Theme.violet)
                 }
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             }
             .scrollContentBackground(.hidden)
-            .background { DaylightGround() }
+            .background { DaylightGround(mood: Theme.magenta, energy: 0.2) }
             .navigationBarTitleDisplayMode(.inline)
             .navigationTitle("Settings")
             .sheet(isPresented: $editingProfile) {

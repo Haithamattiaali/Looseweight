@@ -53,7 +53,7 @@ struct ReviewView: View {
                 .padding(.horizontal, Theme.gutter)
                 .padding(.bottom, Theme.xxl)
             }
-            .background { DaylightGround() }
+            .background { DaylightGround(mood: estimate.items.first.map { Theme.foodColor(for: $0.name, isDrink: $0.isDrink) }) }
             .navigationTitle(estimate.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbar }
@@ -109,14 +109,13 @@ struct ReviewView: View {
     }
 
     private var itemList: some View {
-        VStack(spacing: 0) {
-            Hairline()
-            ForEach($estimate.items) { $item in
-                ItemRow(item: $item, profile: profiles[item.id] ?? item.portionProfile, seenGrams: suggestions[item.id] ?? item.grams,
+        VStack(spacing: Theme.s) {
+            ForEach(Array(estimate.items.enumerated()), id: \.element.id) { index, item in
+                ItemRow(item: $estimate.items[index], profile: profiles[item.id] ?? item.portionProfile, seenGrams: suggestions[item.id] ?? item.grams,
                         isSelected: selected == item.id) {
                     withAnimation(Theme.settle) { selected = selected == item.id ? nil : item.id }
                 }
-                Hairline()
+                .streamIn(index)
             }
             Button {
                 showingSearch = true
@@ -125,7 +124,8 @@ struct ReviewView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Theme.leaf)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, Theme.m)
+                    .padding(Theme.m)
+                    .glassSurface(tint: Theme.leaf)
             }
             .buttonStyle(PressableStyle())
         }
@@ -158,12 +158,13 @@ private struct ReviewTotal: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(Int(total.kcal.rounded()), format: .number)
                     .font(.hero)
-                    .tracking(-2)
+                    .tracking(-3)
                     .monospacedDigit()
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)
-                    .foregroundStyle(Theme.ink)
+                    .foregroundStyle(LinearGradient(colors: [Theme.ink, Theme.leaf], startPoint: .top, endPoint: .bottom))
                     .contentTransition(.numericText(value: total.kcal))
+                    .glow(Theme.leaf, radius: 20)
                     .accessibilityIdentifier("reviewTotal")
                 LabelText("kcal")
             }
@@ -208,6 +209,7 @@ private struct SlicedPhoto: View {
                 }
             }
             .clipShape(.rect(cornerRadius: Theme.controlRadius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous).strokeBorder(Theme.aiGradient, lineWidth: 1.5).opacity(0.8))
             .frame(maxHeight: 340)
             .animation(Theme.settle, value: selected)
             .accessibilityHidden(true)
@@ -217,12 +219,13 @@ private struct SlicedPhoto: View {
         let isSelected = selected == item.id
         let dimmed = selected != nil && !isSelected
         let path = outline(item.polygon, in: size)
+        let color = Theme.foodColor(for: item.name, isDrink: item.isDrink)
         return ZStack {
-            path.fill(Theme.leaf.opacity(isSelected ? 0.25 : 0))
-            path.stroke(isSelected ? Theme.leaf : Color.white, style: StrokeStyle(lineWidth: isSelected ? 4 : 2, lineJoin: .round))
+            path.fill(color.opacity(isSelected ? 0.35 : 0.12))
+            path.stroke(color, style: StrokeStyle(lineWidth: isSelected ? 4 : 2.5, lineJoin: .round))
         }
         .opacity(dimmed ? 0.3 : 1)
-        .shadow(color: .black.opacity(0.35), radius: 3)
+        .glow(color, radius: isSelected ? 10 : 4)
     }
 
     /// Polygons are in the pixels of the image the model saw, which keeps the photo's aspect ratio.
@@ -254,20 +257,33 @@ private struct ItemRow: View {
                 .contentShape(.rect)
                 .onTapGesture(perform: onTap)
             if isSelected {
-                PortionEditor(item: $item, profile: profile, seenGrams: seenGrams)
+                PortionEditor(item: $item, profile: profile, seenGrams: seenGrams, tint: color)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(.vertical, Theme.s)
+        .padding(Theme.m)
+        .glassSurface(tint: isSelected ? color : nil)
+        .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous).strokeBorder(color.opacity(isSelected ? 0.7 : 0), lineWidth: 1.5))
     }
+
+    private var color: Color { Theme.foodColor(for: item.name, isDrink: item.isDrink) }
 
     private var summary: some View {
         HStack(alignment: .center, spacing: Theme.xs) {
-            ConfidenceDot(value: item.confidence)
+            FoodDot(color: color)
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.name)
-                    .font(.headline)
-                    .foregroundStyle(Theme.ink)
+                HStack(spacing: 6) {
+                    Text(item.name)
+                        .font(.rounded(.headline, weight: .bold))
+                        .foregroundStyle(Theme.ink)
+                    if item.isDrink {
+                        Image(systemName: "cup.and.saucer.fill")
+                            .font(.caption)
+                            .foregroundStyle(color)
+                            .accessibilityLabel("Drink")
+                    }
+                    ConfidenceDot(value: item.confidence)
+                }
                 if !flagText.isEmpty {
                     Text(flagText)
                         .font(.caption)
@@ -282,7 +298,7 @@ private struct ItemRow: View {
             Text(Int(item.nutrients.kcal.rounded()), format: .number)
                 .font(.numeric)
                 .monospacedDigit()
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(color)
                 .contentTransition(.numericText(value: item.nutrients.kcal))
                 .frame(minWidth: 48, alignment: .trailing)
         }
@@ -303,6 +319,7 @@ private struct PortionEditor: View {
     @Binding var item: EstimatedItem
     var profile: PortionProfile
     var seenGrams: Double
+    var tint: Color = Theme.leaf
     @Environment(\.unitsMode) private var unitsMode
 
     private var amounts: AmountFormatter { AmountFormatter(mode: unitsMode) }
@@ -315,7 +332,7 @@ private struct PortionEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.s) {
-            UnitSlider(name: item.name, scale: scale, grams: $item.grams, suggestedGrams: seenGrams)
+            UnitSlider(name: item.name, scale: scale, grams: $item.grams, suggestedGrams: seenGrams, tint: tint)
             HStack {
                 Text(amounts.range(low: item.gramsLow, high: item.gramsHigh, profile: profile))
                     .font(.caption)
