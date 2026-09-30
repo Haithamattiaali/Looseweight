@@ -40,7 +40,7 @@ struct ScanFlowView: View {
                     .task(id: meal.id) {
                         await flow.run()
                         if case let .success(estimate)? = flow.outcome {
-                            withAnimation(Theme.spring) { stage = .review(meal, estimate) }
+                            withAnimation(Theme.settle) { stage = .review(meal, estimate) }
                         }
                     }
             case let .review(meal, estimate):
@@ -55,12 +55,12 @@ struct ScanFlowView: View {
                         Store.save(edited, mealType: mealType, photo: photo, source: meal.source.rawValue, in: context)
                         dismiss()
                     },
-                    onRetake: { withAnimation(Theme.spring) { stage = .camera } }
+                    onRetake: { withAnimation(Theme.settle) { stage = .camera } }
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(Theme.spring, value: stageKey)
+        .animation(Theme.settle, value: stageKey)
         .sheet(isPresented: $showingBarcode) {
             BarcodeFlowView(mealType: mealType) { dismiss() }
         }
@@ -82,7 +82,7 @@ struct ScanFlowView: View {
             mealType: mealType,
             userNote: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note
         )
-        withAnimation(Theme.spring) { stage = .analyzing(meal, flow) }
+        withAnimation(Theme.settle) { stage = .analyzing(meal, flow) }
     }
 }
 
@@ -100,26 +100,36 @@ private struct CameraScreen: View {
     @State private var isCapturing = false
     @State private var captureError: String?
     @State private var showingNote = false
+    @State private var showingFrameHint = true
+    @State private var shots = 0
 
     private var arAvailable: Bool { ARCaptureController.isSupported }
+    /// Without AR (simulator, demo) the frame is always "ready".
+    private var ready: Bool { controller?.guidance.ready ?? true }
 
     var body: some View {
         ZStack {
             preview.ignoresSafeArea()
-            reticle
-            VStack {
+            CaptureFrame(ready: ready, showsHint: showingFrameHint)
+            VStack(spacing: Theme.m) {
                 topBar
                 Spacer()
                 guidancePill
                 bottomBar
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 12)
+            .padding(.horizontal, Theme.gutter)
+            .padding(.bottom, Theme.s)
         }
         .background(Color.black)
+        .sensoryFeedback(.alignment, trigger: ready) { old, new in !old && new }
+        .sensoryFeedback(.impact(weight: .medium), trigger: shots)
         .onAppear {
             if arAvailable, controller == nil { controller = ARCaptureController() }
             controller?.start()
+        }
+        .task {
+            try? await Task.sleep(for: .seconds(3))
+            withAnimation(Theme.settle) { showingFrameHint = false }
         }
         .onDisappear { controller?.stop() }
         .onChange(of: pickerItem) { _, item in
@@ -146,97 +156,89 @@ private struct CameraScreen: View {
                 .resizable()
                 .scaledToFill()
                 .overlay(alignment: .top) {
-                    Text("Demo photo — this device has no AR camera")
-                        .font(.rounded(.footnote, weight: .semibold))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .glassEffect(.regular, in: .capsule)
-                        .padding(.top, 110)
+                    GlassPill {
+                        Text("Demo photo — this device has no AR camera")
+                            .font(.footnote.weight(.semibold))
+                    }
+                    .padding(.top, 110)
                 }
         }
-    }
-
-    /// Corner brackets around the whole capture area: everything inside is analysed, every plate and side.
-    private var reticle: some View {
-        GeometryReader { proxy in
-            let inset: CGFloat = 20
-            let rect = CGRect(x: inset, y: 120, width: proxy.size.width - inset * 2, height: proxy.size.height - 330)
-            ZStack(alignment: .top) {
-                CaptureBrackets(length: 34)
-                    .stroke(.white.opacity(0.85), style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                    .frame(width: rect.width, height: rect.height)
-                    .position(x: rect.midX, y: rect.midY)
-                    .shadow(color: .black.opacity(0.3), radius: 6)
-                Text("Fit every plate and side inside the frame")
-                    .font(.rounded(.caption, weight: .semibold))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .glassEffect(.regular, in: .capsule)
-                    .position(x: rect.midX, y: rect.minY + 24)
-            }
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 
     private var topBar: some View {
-        HStack(spacing: 12) {
-            Button(action: onClose) {
-                Image(systemName: "xmark").font(.headline)
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .accessibilityLabel("Close")
-
-            Spacer()
-
-            Menu {
-                Picker("Meal", selection: $mealType) {
-                    ForEach(MealType.allCases) { type in
-                        Label(type.title, systemImage: type.systemImage).tag(type)
-                    }
+        GlassEffectContainer(spacing: 20) {
+            HStack(spacing: Theme.s) {
+                Button(action: onClose) {
+                    Image(systemName: "xmark").font(.headline)
+                        .frame(width: 44, height: 44)
                 }
-            } label: {
-                Label(mealType.title, systemImage: mealType.systemImage)
-                    .font(.rounded(.subheadline, weight: .semibold))
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .accessibilityLabel("Close")
+
+                Spacer()
+
+                Menu {
+                    Picker("Meal", selection: $mealType) {
+                        ForEach(MealType.allCases) { type in
+                            Label(type.title, systemImage: type.systemImage).tag(type)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(mealType.title)
+                        Image(systemName: "chevron.down").font(.caption.weight(.bold))
+                    }
+                    .font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 14)
                     .frame(height: 44)
-            }
-            .buttonStyle(.glass)
+                }
+                .buttonStyle(.glass)
 
-            if controller?.hasLiDAR == true {
-                Badge(text: "LiDAR", systemImage: "cube.transparent", color: Theme.mint)
+                if controller?.hasLiDAR == true {
+                    Image(systemName: "cube.transparent")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(width: 44, height: 44)
+                        .modifier(ControlGlass(tint: nil, shape: Circle()))
+                        .accessibilityLabel("LiDAR depth on")
+                }
             }
         }
-        .padding(.top, 8)
+        .padding(.top, Theme.xs)
     }
 
-    @ViewBuilder
     private var guidancePill: some View {
         let guidance = controller?.guidance
-        HStack(spacing: 10) {
-            LevelBubble(tilt: guidance?.tiltDegrees ?? 0)
+        return HStack(spacing: 10) {
+            LevelBubble(tilt: guidance?.tiltDegrees ?? 0, ready: ready)
                 .frame(width: 26, height: 26)
-            Text(guidance?.message ?? "Tap the shutter to try the demo")
-                .font(.rounded(.subheadline, weight: .semibold))
+            Text(pillMessage(guidance))
+                .font(.subheadline.weight(.semibold))
                 .contentTransition(.opacity)
             if let distance = guidance?.distanceCm {
                 Text("\(Int(distance)) cm")
-                    .font(.rounded(.caption, weight: .bold))
+                    .font(.caption.weight(.bold))
                     .monospacedDigit()
+                    .contentTransition(.numericText(value: distance))
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, Theme.m)
         .padding(.vertical, 10)
-        .glassEffect(.regular.tint((guidance?.ready ?? true) ? Theme.mint.opacity(0.35) : Theme.sun.opacity(0.25)), in: .capsule)
-        .animation(Theme.spring, value: guidance)
+        .modifier(ControlGlass(tint: ready ? Theme.leaf : nil, shape: Capsule()))
+        .animation(Theme.settle, value: guidance)
+        .animation(Theme.settle, value: showingFrameHint)
+        .accessibilityElement(children: .combine)
         .accessibilityIdentifier("guidance")
     }
 
+    private func pillMessage(_ guidance: ARCaptureController.Guidance?) -> String {
+        if let guidance { return showingFrameHint && guidance.ready ? "Fit every plate and side inside the frame" : guidance.message }
+        return "Tap the shutter to try the demo"
+    }
+
     private var bottomBar: some View {
-        GlassEffectContainer(spacing: 24) {
+        GlassEffectContainer(spacing: 20) {
             HStack(alignment: .center, spacing: 28) {
                 PhotosPicker(selection: $pickerItem, matching: .images) {
                     Image(systemName: "photo.on.rectangle").font(.title3)
@@ -246,25 +248,13 @@ private struct CameraScreen: View {
                 .buttonBorderShape(.circle)
                 .accessibilityLabel("Choose a photo")
 
-                Button(action: shoot) {
-                    ZStack {
-                        Circle().fill(.white.opacity(0.9)).frame(width: 70, height: 70)
-                        if isCapturing { ProgressView().tint(.black) }
-                    }
-                    .frame(width: 84, height: 84)
-                }
-                .buttonStyle(.glassProminent)
-                .buttonBorderShape(.circle)
-                .tint((controller?.guidance.ready ?? true) ? Theme.teal : .gray)
-                .disabled(isCapturing)
-                .accessibilityIdentifier("shutter")
-                .accessibilityLabel("Measure the meal")
+                ShutterButton(ready: ready, isCapturing: isCapturing, action: shoot)
 
                 Menu {
                     Button { showingNote = true } label: { Label("Add a note", systemImage: "text.bubble") }
                     Button(action: onBarcode) { Label("Scan a barcode", systemImage: "barcode.viewfinder") }
                 } label: {
-                    Image(systemName: "ellipsis").font(.title3)
+                    Image(systemName: "square.and.pencil").font(.title3)
                         .frame(width: 56, height: 56)
                 }
                 .buttonStyle(.glass)
@@ -272,12 +262,13 @@ private struct CameraScreen: View {
                 .accessibilityLabel("More")
             }
         }
-        .padding(.top, 16)
+        .padding(.top, Theme.xs)
     }
 
     private func shoot() {
         guard !isCapturing else { return }
         isCapturing = true
+        shots += 1
         Task {
             defer { isCapturing = false }
             if let controller {
@@ -299,6 +290,67 @@ private struct CameraScreen: View {
             return
         }
         onCapture(CapturedMeal(image: image, geometry: nil, deviceHasLiDAR: false, source: .library))
+    }
+}
+
+/// The shutter: glass orb, inner disc settles to full size when the phone is ready.
+private struct ShutterButton: View {
+    var ready: Bool
+    var isCapturing: Bool
+    var action: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(.white.opacity(0.92))
+                    .frame(width: 66, height: 66)
+                    .scaleEffect(ready || reduceMotion ? 1 : 0.92)
+                    .animation(Theme.settle, value: ready)
+                if isCapturing { ProgressView().tint(.black) }
+            }
+            .frame(width: 84, height: 84)
+        }
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.circle)
+        .tint(ready ? Theme.leaf : .gray)
+        .disabled(isCapturing)
+        .accessibilityIdentifier("shutter")
+        .accessibilityLabel("Measure the meal")
+    }
+}
+
+/// Corner brackets around the WHOLE capture area — everything inside the frame is analysed, every plate and side.
+/// White while aligning, leaf (and slightly tighter) once level and in range.
+private struct CaptureFrame: View {
+    var ready: Bool
+    var showsHint: Bool
+
+    var body: some View {
+        GeometryReader { proxy in
+            let inset: CGFloat = ready ? 22 : 16
+            let rect = CGRect(x: inset, y: 110, width: proxy.size.width - inset * 2, height: max(proxy.size.height - 320, 100))
+            ZStack(alignment: .top) {
+                CaptureBrackets(length: ready ? 40 : 32)
+                    .stroke(ready ? Theme.leaf : Color.white.opacity(0.85), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+                    .frame(width: rect.width, height: rect.height)
+                    .position(x: rect.midX, y: rect.midY)
+                    .shadow(color: .black.opacity(0.3), radius: 6)
+                if showsHint {
+                    GlassPill {
+                        Text("Fit every plate and side inside the frame")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .position(x: rect.midX, y: rect.minY + 28)
+                    .transition(.opacity)
+                }
+            }
+        }
+        .animation(Theme.settle, value: ready)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -326,18 +378,19 @@ private struct CaptureBrackets: Shape {
     }
 }
 
-/// Bubble level: the dot sits in the centre when the phone is flat.
+/// Bubble level: the dot slides to the centre when the phone is flat.
 private struct LevelBubble: View {
     var tilt: Double
+    var ready: Bool
 
     var body: some View {
         ZStack {
             Circle().strokeBorder(.primary.opacity(0.35), lineWidth: 1.5)
             Circle()
-                .fill(tilt <= 25 ? Theme.mint : Theme.sun)
+                .fill(ready ? Theme.leaf : Theme.honey)
                 .frame(width: 9, height: 9)
                 .offset(y: CGFloat(min(tilt, 45) / 45 * 9))
-                .animation(Theme.spring, value: tilt)
+                .animation(Theme.settle, value: tilt)
         }
         .accessibilityLabel(tilt <= 25 ? "Phone is level" : "Tilt the phone flat")
     }

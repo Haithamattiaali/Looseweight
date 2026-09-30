@@ -1,6 +1,7 @@
 import LooseweightKit
 import SwiftUI
 
+/// "Slices": the photo with each food outlined, one hero total, and plain rows that expand in place.
 struct ReviewView: View {
     let image: UIImage
     @State var estimate: MealEstimate
@@ -10,6 +11,8 @@ struct ReviewView: View {
 
     @State private var selected: UUID?
     @State private var showingSearch = false
+    @State private var appeared = false
+    @State private var saved = false
 
     init(image: UIImage, estimate: MealEstimate, mealType: Binding<MealType>, onSave: @escaping (MealEstimate) -> Void, onRetake: @escaping () -> Void) {
         self.image = image
@@ -22,73 +25,25 @@ struct ReviewView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 18) {
-                    photo
-                    totalCard
+                VStack(spacing: Theme.l) {
+                    SlicedPhoto(image: image, items: estimate.items, selected: selected)
+                    ReviewTotal(estimate: estimate)
                     if let question = estimate.clarifyingQuestion {
-                        GlassCard(tint: Theme.sky, padding: 14) {
-                            Label(question, systemImage: "questionmark.bubble")
-                                .font(.rounded(.footnote, weight: .medium))
-                        }
+                        Label(question, systemImage: "questionmark.bubble")
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(Theme.inkSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    VStack(spacing: 12) {
-                        SectionTitle(text: "What's on the plate", systemImage: "fork.knife")
-                        ForEach($estimate.items) { $item in
-                            ItemCard(item: $item, isSelected: selected == item.id)
-                                .onTapGesture { withAnimation(Theme.spring) { selected = selected == item.id ? nil : item.id } }
-                        }
-                        Button {
-                            showingSearch = true
-                        } label: {
-                            Label("Add something the AI missed", systemImage: "plus")
-                                .font(.rounded(.subheadline, weight: .semibold))
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.glass)
-                        .controlSize(.large)
-                    }
-                    ForEach(estimate.warnings, id: \.self) { warning in
-                        Label(warning, systemImage: "info.circle").font(.rounded(.caption)).foregroundStyle(.secondary)
-                    }
-                    Text("Estimates, not medical advice. Tap an item to adjust it.")
-                        .font(.rounded(.caption2))
-                        .foregroundStyle(.tertiary)
+                    itemList
+                    footnotes
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 120)
+                .padding(.horizontal, Theme.gutter)
+                .padding(.bottom, Theme.xxl)
             }
-            .background { AmbientBackground() }
+            .background { DaylightGround() }
             .navigationTitle(estimate.title)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Retake", action: onRetake)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Picker("Meal", selection: $mealType) {
-                            ForEach(MealType.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
-                        }
-                    } label: {
-                        Label(mealType.title, systemImage: mealType.systemImage)
-                    }
-                }
-            }
-            .safeAreaInset(edge: .bottom) {
-                Button {
-                    onSave(estimate)
-                } label: {
-                    Label("Save to \(mealType.title) · \(Int(estimate.total.kcal.rounded())) kcal", systemImage: "checkmark")
-                        .font(.rounded(.headline, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                }
-                .buttonStyle(.glassProminent)
-                .controlSize(.large)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 8)
-                .accessibilityIdentifier("saveMeal")
-            }
+            .toolbar { toolbar }
             .sheet(isPresented: $showingSearch) {
                 FoodSearchView { record, grams in
                     estimate.items.append(EstimatedItem(
@@ -96,27 +51,175 @@ struct ReviewView: View {
                         food: FoodMatch(id: record.id, name: record.name, source: record.source), method: .userNote, confidence: 1
                     ))
                 }
+                .presentationDetents([.medium, .large])
             }
+            .sensoryFeedback(.success, trigger: appeared)
+            .onAppear { appeared = true }
         }
     }
 
-    private var photo: some View {
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button(action: onRetake) {
+                Image(systemName: "xmark")
+            }
+            .accessibilityLabel("Retake")
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            Menu {
+                Picker("Meal", selection: $mealType) {
+                    ForEach(MealType.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
+                }
+            } label: {
+                Text(mealType.title)
+            }
+            .accessibilityLabel("Meal: \(mealType.title)")
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                withAnimation(Theme.snap) { saved = true }
+                onSave(estimate)
+            } label: {
+                Label("Save", systemImage: "checkmark")
+                    .labelStyle(.titleAndIcon)
+                    .symbolEffect(.bounce, value: saved)
+            }
+            .buttonStyle(.glassProminent)
+            .tint(Theme.leaf)
+            .accessibilityLabel("Save to \(mealType.title), \(Int(estimate.total.kcal.rounded())) kcal")
+            .accessibilityIdentifier("saveMeal")
+        }
+    }
+
+    private var itemList: some View {
+        VStack(spacing: 0) {
+            Hairline()
+            ForEach($estimate.items) { $item in
+                ItemRow(item: $item, isSelected: selected == item.id) {
+                    withAnimation(Theme.settle) { selected = selected == item.id ? nil : item.id }
+                }
+                Hairline()
+            }
+            Button {
+                showingSearch = true
+            } label: {
+                Label("Add something the AI missed", systemImage: "plus")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.leaf)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, Theme.m)
+            }
+            .buttonStyle(PressableStyle())
+        }
+    }
+
+    private var footnotes: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            ForEach(estimate.warnings, id: \.self) { warning in
+                Label(warning, systemImage: "info.circle")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.inkSecondary)
+            }
+            Text("Estimates, not medical advice. Tap an item to adjust it.")
+                .font(.footnote)
+                .foregroundStyle(Theme.inkTertiary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Hero total, likely range, confidence and macros — no card.
+private struct ReviewTotal: View {
+    let estimate: MealEstimate
+
+    private var total: Nutrients { estimate.total }
+    private var range: ClosedRange<Double> { estimate.kcalRange }
+
+    var body: some View {
+        VStack(spacing: Theme.xs) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(Int(total.kcal.rounded()), format: .number)
+                    .font(.hero)
+                    .tracking(-2)
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
+                    .foregroundStyle(Theme.ink)
+                    .contentTransition(.numericText(value: total.kcal))
+                    .accessibilityIdentifier("reviewTotal")
+                LabelText("kcal")
+            }
+            HStack(spacing: 6) {
+                ConfidenceDot(value: estimate.overallConfidence)
+                Text("likely \(Int(range.lowerBound))–\(Int(range.upperBound))")
+                    .font(.footnote)
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.inkSecondary)
+                if estimate.usedDepth {
+                    Image(systemName: "cube.transparent")
+                        .font(.footnote)
+                        .foregroundStyle(Theme.inkSecondary)
+                        .accessibilityLabel("Measured in 3D")
+                }
+            }
+            HStack(spacing: Theme.l) {
+                macro("Protein", total.protein, Theme.protein)
+                macro("Carbs", total.carbs, Theme.carbs)
+                macro("Fat", total.fat, Theme.fat)
+            }
+            .padding(.top, Theme.xs)
+        }
+        .frame(maxWidth: .infinity)
+        .animation(Theme.snap, value: total.kcal)
+    }
+
+    private func macro(_ title: String, _ grams: Double, _ color: Color) -> some View {
+        VStack(spacing: 2) {
+            LabelText(title, color: color)
+            Text(grams.gramsText)
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(Theme.ink)
+        }
+    }
+}
+
+/// The photo with every food outlined. The selected slice brightens, the others dim.
+private struct SlicedPhoto: View {
+    let image: UIImage
+    let items: [EstimatedItem]
+    let selected: UUID?
+
+    var body: some View {
         Image(uiImage: image)
             .resizable()
             .scaledToFit()
             .overlay {
                 GeometryReader { proxy in
-                    ForEach(estimate.items) { item in
+                    ForEach(items) { item in
                         if item.polygon.count >= 3 {
-                            outline(item.polygon, in: proxy.size)
-                                .stroke(selected == item.id ? Theme.sun : .white, style: StrokeStyle(lineWidth: selected == item.id ? 4 : 2, lineJoin: .round))
-                                .shadow(color: .black.opacity(0.35), radius: 3)
+                            slice(item, in: proxy.size)
                         }
                     }
                 }
             }
-            .clipShape(.rect(cornerRadius: Theme.cardRadius))
+            .clipShape(.rect(cornerRadius: Theme.controlRadius, style: .continuous))
             .frame(maxHeight: 340)
+            .animation(Theme.settle, value: selected)
+            .accessibilityHidden(true)
+    }
+
+    private func slice(_ item: EstimatedItem, in size: CGSize) -> some View {
+        let isSelected = selected == item.id
+        let dimmed = selected != nil && !isSelected
+        let path = outline(item.polygon, in: size)
+        return ZStack {
+            path.fill(Theme.leaf.opacity(isSelected ? 0.25 : 0))
+            path.stroke(isSelected ? Theme.leaf : Color.white, style: StrokeStyle(lineWidth: isSelected ? 4 : 2, lineJoin: .round))
+        }
+        .opacity(dimmed ? 0.3 : 1)
+        .shadow(color: .black.opacity(0.35), radius: 3)
     }
 
     /// Polygons are in the pixels of the image the model saw, which keeps the photo's aspect ratio.
@@ -131,111 +234,66 @@ struct ReviewView: View {
         path.closeSubpath()
         return path
     }
+}
 
-    private var totalCard: some View {
-        let total = estimate.total
-        let range = estimate.kcalRange
-        return GlassCard {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("\(Int(total.kcal.rounded()))")
-                        .font(.system(size: 48, weight: .bold, design: .rounded))
-                        .contentTransition(.numericText())
-                        .monospacedDigit()
-                        .accessibilityIdentifier("reviewTotal")
-                    Text("kcal").font(.rounded(.title3, weight: .semibold)).foregroundStyle(.secondary)
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text("likely \(Int(range.lowerBound))–\(Int(range.upperBound))")
-                            .font(.rounded(.caption, weight: .semibold)).foregroundStyle(.secondary)
-                        HStack(spacing: 6) {
-                            if estimate.usedDepth { Badge(text: "LiDAR", systemImage: "cube.transparent", color: Theme.teal) }
-                            Badge(text: "\(Int(estimate.overallConfidence * 100))% sure", systemImage: "gauge.medium", color: Theme.confidenceColor(estimate.overallConfidence))
-                        }
-                    }
-                }
-                HStack(spacing: 12) {
-                    macro("Protein", total.protein, Theme.protein)
-                    macro("Carbs", total.carbs, Theme.carbs)
-                    macro("Fat", total.fat, Theme.fat)
-                }
+/// One food: confidence dot, name, grams, kcal. Tap expands the portion controls in place.
+private struct ItemRow: View {
+    @Binding var item: EstimatedItem
+    var isSelected: Bool
+    var onTap: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.s) {
+            summary
+                .contentShape(.rect)
+                .onTapGesture(perform: onTap)
+            if isSelected {
+                PortionEditor(item: $item)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .animation(Theme.spring, value: total.kcal)
+        .padding(.vertical, Theme.s)
     }
 
-    private func macro(_ title: String, _ grams: Double, _ color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.rounded(.caption, weight: .medium)).foregroundStyle(.secondary)
-            Text(grams.gramsText).font(.rounded(.headline, weight: .bold)).foregroundStyle(color).monospacedDigit()
+    private var summary: some View {
+        HStack(alignment: .center, spacing: Theme.xs) {
+            ConfidenceDot(value: item.confidence)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name)
+                    .font(.headline)
+                    .foregroundStyle(Theme.ink)
+                if !flagText.isEmpty {
+                    Text(flagText)
+                        .font(.caption)
+                        .foregroundStyle(Theme.inkTertiary)
+                }
+            }
+            Spacer(minLength: Theme.xs)
+            Text(item.grams.gramsText)
+                .font(.subheadline)
+                .monospacedDigit()
+                .foregroundStyle(Theme.inkSecondary)
+            Text(Int(item.nutrients.kcal.rounded()), format: .number)
+                .font(.numeric)
+                .monospacedDigit()
+                .foregroundStyle(Theme.ink)
+                .contentTransition(.numericText(value: item.nutrients.kcal))
+                .frame(minWidth: 48, alignment: .trailing)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var flagText: String {
+        var parts = [item.method.title]
+        if item.flags.contains(.aiEstimate) { parts.append("AI estimate") }
+        if item.flags.contains(.checkMatch) { parts.append("Check the match") }
+        if item.flags.contains(.hiddenIngredient) { parts.append("Hidden ingredient") }
+        return parts.joined(separator: " · ")
     }
 }
 
-private struct ItemCard: View {
+/// Slider over a tinted band that shows the likely range — the uncertainty stays visible.
+private struct PortionEditor: View {
     @Binding var item: EstimatedItem
-    var isSelected: Bool
-
-    var body: some View {
-        GlassCard(tint: isSelected ? Theme.teal : nil, padding: 16) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(item.name).font(.rounded(.headline, weight: .semibold))
-                        HStack(spacing: 6) {
-                            Badge(text: item.method.title, systemImage: methodIcon, color: item.method == .depthVolume ? Theme.teal : .secondary)
-                            if item.flags.contains(.aiEstimate) { Badge(text: "AI estimate", systemImage: "sparkles", color: Theme.sun) }
-                            if item.flags.contains(.checkMatch) { Badge(text: "Check", systemImage: "exclamationmark.triangle", color: Theme.coral) }
-                            if item.flags.contains(.hiddenIngredient) { Badge(text: "Hidden", systemImage: "drop", color: Theme.sky) }
-                        }
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(Int(item.nutrients.kcal.rounded()))")
-                            .font(.rounded(.title3, weight: .bold))
-                            .contentTransition(.numericText())
-                            .monospacedDigit()
-                        Text("kcal").font(.rounded(.caption2)).foregroundStyle(.secondary)
-                    }
-                }
-                HStack(spacing: 10) {
-                    Circle().fill(Theme.confidenceColor(item.confidence)).frame(width: 8, height: 8)
-                    Text("\(Int(item.grams)) g")
-                        .font(.rounded(.subheadline, weight: .semibold))
-                        .monospacedDigit()
-                    Text("range \(Int(item.gramsLow))–\(Int(item.gramsHigh)) g")
-                        .font(.rounded(.caption))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    if let match = item.food {
-                        Text(match.name).font(.rounded(.caption2)).foregroundStyle(.tertiary).lineLimit(1)
-                    }
-                }
-                if isSelected {
-                    VStack(spacing: 10) {
-                        Slider(value: $item.grams, in: sliderRange, step: 1)
-                            .tint(Theme.teal)
-                        HStack {
-                            ForEach([-25.0, -10.0, 10.0, 25.0], id: \.self) { delta in
-                                Button(delta > 0 ? "+\(Int(delta)) g" : "\(Int(delta)) g") {
-                                    item.grams = max(0, item.grams + delta)
-                                }
-                                .buttonStyle(.glass)
-                                .font(.rounded(.caption, weight: .semibold))
-                            }
-                        }
-                        if !item.notes.isEmpty {
-                            Text(item.notes).font(.rounded(.caption)).foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-            }
-        }
-        .contentShape(.rect)
-    }
 
     private var sliderRange: ClosedRange<Double> {
         let low = max(0, min(item.gramsLow, item.grams) * 0.5)
@@ -243,14 +301,58 @@ private struct ItemCard: View {
         return low...high
     }
 
-    private var methodIcon: String {
-        switch item.method {
-        case .depthVolume: "cube.transparent"
-        case .areaThickness: "square.dashed"
-        case .visualEstimate: "eye"
-        case .count: "number"
-        case .label: "doc.text.viewfinder"
-        case .userNote: "hand.point.up.left"
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.s) {
+            Slider(value: $item.grams, in: sliderRange, step: 1)
+                .tint(Theme.leaf)
+                .background(alignment: .leading) { rangeBand }
+                .sensoryFeedback(.selection, trigger: Int(item.grams / 10))
+                .accessibilityLabel("Portion of \(item.name)")
+                .accessibilityValue(item.grams.gramsText)
+            HStack {
+                Text("likely \(Int(item.gramsLow))–\(Int(item.gramsHigh)) g")
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.inkSecondary)
+                Spacer()
+                if let match = item.food {
+                    Text(match.name)
+                        .font(.caption)
+                        .foregroundStyle(Theme.inkTertiary)
+                        .lineLimit(1)
+                }
+            }
+            GlassEffectContainer(spacing: 20) {
+                HStack(spacing: Theme.xs) {
+                    ForEach([-25.0, -10.0, 10.0, 25.0], id: \.self) { delta in
+                        Button(delta > 0 ? "+\(Int(delta)) g" : "\(Int(delta)) g") {
+                            withAnimation(Theme.snap) { item.grams = max(0, item.grams + delta) }
+                        }
+                        .buttonStyle(.glass)
+                        .font(.caption.weight(.semibold))
+                    }
+                }
+            }
+            if !item.notes.isEmpty {
+                Text(item.notes)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.inkSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
+    }
+
+    private var rangeBand: some View {
+        GeometryReader { proxy in
+            let span = max(sliderRange.upperBound - sliderRange.lowerBound, 1)
+            let start = (item.gramsLow - sliderRange.lowerBound) / span
+            let end = (item.gramsHigh - sliderRange.lowerBound) / span
+            Capsule()
+                .fill(Theme.leaf.opacity(0.18))
+                .frame(width: max(8, proxy.size.width * CGFloat(max(end - start, 0))), height: 10)
+                .offset(x: proxy.size.width * CGFloat(max(start, 0)))
+                .frame(maxHeight: .infinity, alignment: .center)
+        }
+        .allowsHitTesting(false)
     }
 }

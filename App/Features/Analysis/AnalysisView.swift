@@ -1,59 +1,41 @@
 import SwiftUI
 
+/// "The plate reads": the captured photo with a light sweeping around it while the steps tick through.
 struct AnalysisView: View {
     let meal: CapturedMeal
     let flow: AnalysisFlow
     var onRetry: () -> Void
     var onClose: () -> Void
 
-    @State private var scanPhase = false
+    private var doneCount: Int { flow.steps.filter { $0.state == .done }.count }
+    private var isRunning: Bool { flow.outcome == nil }
 
     var body: some View {
         ZStack {
-            AmbientBackground()
+            DaylightGround()
             ScrollView {
-                VStack(spacing: 22) {
-                    photo
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: 16) {
-                            ForEach(flow.steps) { step in
-                                StepRow(step: step)
-                            }
-                        }
-                    }
-                    .accessibilityIdentifier("analysisSteps")
+                VStack(spacing: Theme.xl) {
+                    ReadingPhoto(image: meal.image, isRunning: isRunning, sourceTitle: sourceTitle, sourceIcon: sourceIcon)
                     if case let .failure(message)? = flow.outcome {
-                        failure(message)
+                        AnalysisFailure(message: message, onRetry: onRetry, onClose: onClose)
+                    } else {
+                        stepList
                     }
                 }
-                .padding(20)
+                .padding(Theme.gutter)
             }
         }
-        .onAppear { scanPhase = true }
+        .sensoryFeedback(.selection, trigger: doneCount)
     }
 
-    private var photo: some View {
-        Image(uiImage: meal.image)
-            .resizable()
-            .scaledToFill()
-            .frame(height: 300)
-            .frame(maxWidth: .infinity)
-            .clipShape(.rect(cornerRadius: Theme.cardRadius))
-            .overlay {
-                GeometryReader { proxy in
-                    LinearGradient(colors: [.clear, Theme.mint.opacity(0.55), .clear], startPoint: .top, endPoint: .bottom)
-                        .frame(height: 90)
-                        .offset(y: scanPhase ? proxy.size.height - 45 : -45)
-                        .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: scanPhase)
-                        .opacity(flow.outcome == nil ? 1 : 0)
-                }
-                .clipShape(.rect(cornerRadius: Theme.cardRadius))
-                .allowsHitTesting(false)
+    private var stepList: some View {
+        VStack(alignment: .leading, spacing: Theme.m) {
+            ForEach(flow.steps) { step in
+                StepRow(step: step)
             }
-            .overlay(alignment: .topLeading) {
-                Badge(text: sourceTitle, systemImage: sourceIcon, color: .white)
-                    .padding(14)
-            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityIdentifier("analysisSteps")
     }
 
     private var sourceTitle: String {
@@ -67,20 +49,81 @@ struct AnalysisView: View {
     private var sourceIcon: String {
         meal.geometry?.heightField != nil ? "cube.transparent" : "camera"
     }
+}
 
-    private func failure(_ message: String) -> some View {
-        GlassCard(tint: Theme.coral) {
-            VStack(alignment: .leading, spacing: 14) {
+/// The full photo (everything captured is analysed, so it is never cropped to a circle), with a
+/// light that travels around its edge while the analysis runs.
+private struct ReadingPhoto: View {
+    let image: UIImage
+    var isRunning: Bool
+    var sourceTitle: String
+    var sourceIcon: String
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFill()
+            .frame(height: 320)
+            .frame(maxWidth: .infinity)
+            .clipShape(.rect(cornerRadius: Theme.controlRadius, style: .continuous))
+            .overlay { sweep }
+            .overlay(alignment: .topLeading) {
+                GlassPill {
+                    Label(sourceTitle, systemImage: sourceIcon)
+                        .font(.caption.weight(.semibold))
+                }
+                .padding(Theme.s)
+            }
+    }
+
+    @ViewBuilder
+    private var sweep: some View {
+        if isRunning {
+            TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { context in
+                let t = context.date.timeIntervalSinceReferenceDate
+                let angle = Angle.degrees((t * 90).truncatingRemainder(dividingBy: 360))
+                RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous)
+                    .strokeBorder(
+                        AngularGradient(
+                            colors: [.clear, Theme.leaf.opacity(0.9), .white, Theme.leaf.opacity(0.9), .clear, .clear],
+                            center: .center,
+                            angle: angle
+                        ),
+                        lineWidth: 4
+                    )
+            }
+            .allowsHitTesting(false)
+            .transition(.opacity)
+        }
+    }
+}
+
+private struct AnalysisFailure: View {
+    var message: String
+    var onRetry: () -> Void
+    var onClose: () -> Void
+
+    var body: some View {
+        VStack(spacing: Theme.m) {
+            GlassPill(tint: Theme.ember) {
                 Label("Analysis stopped", systemImage: "exclamationmark.triangle.fill")
-                    .font(.rounded(.headline, weight: .semibold))
-                    .foregroundStyle(Theme.coral)
-                Text(message).font(.rounded(.subheadline))
-                HStack {
-                    Button("Try again", action: onRetry).buttonStyle(.glassProminent)
+                    .font(.subheadline.weight(.semibold))
+            }
+            Text(message)
+                .font(.body)
+                .foregroundStyle(Theme.inkSecondary)
+                .multilineTextAlignment(.center)
+            GlassEffectContainer(spacing: 20) {
+                HStack(spacing: Theme.s) {
+                    Button("Try again", action: onRetry).buttonStyle(.glassProminent).tint(Theme.ember)
                     Button("Close", action: onClose).buttonStyle(.glass)
                 }
             }
+            .controlSize(.large)
         }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -88,37 +131,64 @@ private struct StepRow: View {
     let step: AnalysisFlow.Step
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            ZStack {
-                switch step.state {
-                case .running:
-                    ProgressView().controlSize(.small)
-                case .done:
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.mint)
-                case .failed:
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.coral)
-                case .skipped:
-                    Image(systemName: "minus.circle").foregroundStyle(.secondary)
-                case .waiting:
-                    Image(systemName: step.systemImage).foregroundStyle(.tertiary)
-                }
-            }
-            .font(.title3)
-            .frame(width: 28, height: 28)
-            .animation(Theme.spring, value: step.state)
+        HStack(alignment: .top, spacing: Theme.s) {
+            icon
+                .font(.body.weight(.semibold))
+                .frame(width: 24, height: 24)
+                .animation(Theme.settle, value: step.state)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(step.title)
-                    .font(.rounded(.subheadline, weight: .semibold))
-                    .foregroundStyle(step.state == .waiting ? .secondary : .primary)
+                StepTitle(title: step.title, isRunning: step.state == .running, isWaiting: step.state == .waiting)
                 if !step.detail.isEmpty {
                     Text(step.detail)
-                        .font(.rounded(.caption))
-                        .foregroundStyle(.secondary)
+                        .font(.footnote)
+                        .foregroundStyle(Theme.inkSecondary)
                         .transition(.opacity)
                 }
             }
             Spacer(minLength: 0)
         }
+    }
+
+    @ViewBuilder
+    private var icon: some View {
+        switch step.state {
+        case .running:
+            ProgressView().controlSize(.small)
+        case .done:
+            Image(systemName: "checkmark")
+                .foregroundStyle(Theme.leaf)
+                .transition(.scale.combined(with: .opacity))
+        case .failed:
+            Image(systemName: "xmark")
+                .foregroundStyle(Theme.ember)
+        case .skipped:
+            Image(systemName: "minus")
+                .foregroundStyle(Theme.inkTertiary)
+        case .waiting:
+            Image(systemName: "circle")
+                .font(.system(size: 8))
+                .foregroundStyle(Theme.inkTertiary)
+        }
+    }
+}
+
+/// The step title stays a plain static Text (UI tests find "Identifying each food"); the running step breathes.
+private struct StepTitle: View {
+    var title: String
+    var isRunning: Bool
+    var isWaiting: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Text(title)
+            .font(.body.weight(isRunning ? .semibold : .regular))
+            .foregroundStyle(isWaiting ? Theme.inkTertiary : Theme.ink)
+            .phaseAnimator([false, true]) { content, dim in
+                content.opacity(isRunning && dim && !reduceMotion ? 0.45 : 1)
+            } animation: { _ in
+                .easeInOut(duration: 1.2)
+            }
     }
 }

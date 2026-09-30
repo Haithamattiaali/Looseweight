@@ -36,16 +36,21 @@ struct BarcodeFlowView: View {
                         code = payload
                         Task { await lookUp(payload) }
                     }
-                    .clipShape(.rect(cornerRadius: Theme.cardRadius))
-                    .padding(.horizontal, 16)
-                    Text("Point at the barcode on the pack").font(.rounded(.subheadline)).foregroundStyle(.secondary)
+                    .clipShape(.rect(cornerRadius: Theme.controlRadius, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous)
+                            .strokeBorder(code == nil ? Color.white.opacity(0.85) : Theme.leaf, lineWidth: 3)
+                            .animation(Theme.settle, value: code)
+                    }
+                    .padding(.horizontal, Theme.m)
+                    Text("Point at the barcode on the pack").font(.subheadline).foregroundStyle(Theme.inkSecondary)
                 } else {
                     ContentUnavailableView("Barcode scanning needs a camera", systemImage: "barcode.viewfinder",
                                            description: Text("Use a real iPhone to scan packaged food."))
                 }
                 Spacer(minLength: 0)
             }
-            .background { AmbientBackground() }
+            .background { DaylightGround() }
             .navigationTitle("Barcode")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -55,7 +60,7 @@ struct BarcodeFlowView: View {
     }
 
     private func productCard(_ product: FoodRecord) -> some View {
-        GlassCard {
+        VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 14) {
                 Text(product.name).font(.rounded(.title3, weight: .bold))
                 Text("Per 100 g: \(Int(product.per100g.kcal)) kcal · P \(product.per100g.protein.oneDecimal) g · C \(product.per100g.carbs.oneDecimal) g · F \(product.per100g.fat.oneDecimal) g")
@@ -67,7 +72,7 @@ struct BarcodeFlowView: View {
                         .frame(maxWidth: 120)
                     Text("g eaten").foregroundStyle(.secondary)
                     Spacer()
-                    Text(product.per100g.amount(forGrams: grams).kcal.kcalText).font(.rounded(.title3, weight: .bold)).foregroundStyle(Theme.teal)
+                    Text(product.per100g.amount(forGrams: grams).kcal.kcalText).font(.rounded(.title3, weight: .bold)).foregroundStyle(Theme.ink)
                 }
                 Button {
                     let item = EstimatedItem(name: product.name, grams: grams, gramsLow: grams, gramsHigh: grams, per100g: product.per100g,
@@ -80,11 +85,15 @@ struct BarcodeFlowView: View {
                     Label("Save to \(mealType.title)", systemImage: "checkmark").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glassProminent)
+                .tint(Theme.leaf)
                 .controlSize(.large)
-                Text("Data: Open Food Facts (ODbL)").font(.rounded(.caption2)).foregroundStyle(.tertiary)
+                Text("Data: Open Food Facts (ODbL)").font(.caption2).foregroundStyle(Theme.inkTertiary)
             }
+            .padding(Theme.l)
+            .modifier(ControlGlass(tint: nil, shape: RoundedRectangle(cornerRadius: Theme.sheetRadius, style: .continuous)))
         }
-        .padding(16)
+        .padding(Theme.m)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     private func lookUp(_ payload: String) async {

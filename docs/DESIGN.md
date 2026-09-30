@@ -6,7 +6,7 @@
 
 **The single idea:** *The day is a plate — one luminous disc that fills as you eat, and every screen is that same disc seen from a different distance.*
 
-Onboarding draws the plate. Today shows it full-width. Scan lays the live camera inside it. Analyzing lets it "read" the food. Review breaks it into slices. Progress stacks yesterday's plates into a timeline. One object, one morph (`glassEffectID` / `matchedGeometryEffect`), never a new metaphor per screen.
+Onboarding draws the plate. Today shows it full-width. Scan frames the live camera with full-frame brackets. Analyzing lets it "read" the food. Review breaks it into slices. Progress stacks yesterday's plates into a timeline. One object, one morph (`glassEffectID` / `matchedGeometryEffect`), never a new metaphor per screen.
 
 ### Removed from today's UI (removal log)
 | Removed | Why |
@@ -158,26 +158,27 @@ Steps: Welcome → About you → Your goal → Your daily plan. The plate outlin
 ```
 ┌─────────────────────────┐
 │ (×)        (Lunch ▾) 3D │  top GlassEffectContainer: close, meal-type pill, LiDAR glyph
-│                         │
-│     ╭───────────────╮   │
-│    ╱  live AR feed   ╲  │  circular "plate lens" mask guide (not brackets):
-│   │   surface mesh    │ │  soft 1pt white ring, outside dimmed 35%
-│    ╲  dots on food   ╱  │
-│     ╰───────────────╯   │
+│ ┌─                   ─┐ │
+│                         │  full-frame corner brackets around the WHOLE capture area
+│      live AR feed       │  (never a circle: everything in the frame is captured and
+│   surface mesh dots     │   analysed, every plate and side)
+│ └─                   ─┘ │
 │   ( ◐ Hold level · 34 cm )  guidance pill, id guidance
 │                         │
 │   (▣)     ( ◉ )     (✎) │  bottom GlassEffectContainer: library, shutter, note
 └─────────────────────────┘
 ```
-- Signature: **the lens aligns.** The ring guide tightens and turns leaf when tilt < 5° and distance in range: ring stroke `trim` + `.animation(.settle)`, the level bubble in the pill slides to center, `.sensoryFeedback(.alignment, trigger: ready)`. The shutter's inner disc scales 0.92→1 with `symbolEffect(.bounce)`-like `phaseAnimator` when ready.
-- The Today accessory ScanOrb morphs into the shutter: `glassEffectID("scan", in: ns)` across the fullScreenCover isn't possible, so use `.navigationTransition(.zoom(sourceID: "scan", in: ns))` with `.matchedTransitionSource(id:"scan", in: ns)` on the accessory button — the orb grows into the camera.
-- Keep text "Fit every plate and side inside the frame" (the reticle copy, now shown in the pill for 3s at open), "Demo photo — this device has no AR camera", "Tap the shutter to try the demo". Keep ids `shutter`, `guidance`.
+- **Owner decision: no round/circular guide.** A circle suggested only its inside was measured, which confused people because the whole frame is captured. The guide is four corner brackets framing the full capture area.
+- Signature: **the frame aligns.** When tilt and distance are in range the brackets turn leaf, lengthen slightly and settle a little inward (`.animation(.settle)`), the level bubble in the pill slides to centre and turns leaf, and `.sensoryFeedback(.alignment, trigger: ready)` fires once per transition to ready. The shutter's inner disc scales 0.92→1 when ready.
+- The Today accessory morphs into the camera: `.navigationTransition(.zoom(sourceID: "scan", in: ns))` on the fullScreenCover content with `.matchedTransitionSource(id: "scan", in: ns)` on the accessory button — the orb grows into the camera.
+- Keep text "Fit every plate and side inside the frame" (shown as a glass pill at the top of the frame for 3 s at open), "Demo photo — this device has no AR camera", "Tap the shutter to try the demo". Keep ids `shutter`, `guidance`.
 - Distance number: `contentTransition(.numericText())`.
+- For the same reason, the captured photo in Analyzing and Review is shown whole (rounded rect, radius 28), never cropped to a circle.
 
 ### 3.4 Analyzing — "The plate reads"
 ```
 ┌─────────────────────────┐
-│  ╭───────────────────╮  │  captured photo, circular crop (same lens), 320pt
+│  ╭───────────────────╮  │  captured photo, whole (rounded rect 28), 320pt
 │  │  • chicken  • rice │  │  labels pop in at detected positions
 │  ╰───────────────────╯  │
 │   ✓ Measuring depth     │
@@ -185,7 +186,7 @@ Steps: Welcome → About you → Your goal → Your daily plan. The plate outlin
 │   ○ Counting calories   │
 └─────────────────────────┘
 ```
-- Signature: a light sweep rotates **around** the circular photo (AngularGradient mask rotating under `breath`), not a scanning bar. As each food is found, a small glass pill springs out from its location (`.transition(.scale.combined(with: .opacity))`, `.sensoryFeedback(.selection)`).
+- Signature: a light sweep travels **around** the edge of the photo (AngularGradient mask rotating under `breath`), not a scanning bar. As each food is found, a small glass pill springs out from its location (`.transition(.scale.combined(with: .opacity))`, `.sensoryFeedback(.selection)`).
 - Active step text uses a custom `TextRenderer` ("ShimmerRenderer") that sweeps opacity per glyph run; completed steps get `Image(systemName:"checkmark").symbolEffect(.drawOn)` (iOS 26) / `.contentTransition(.symbolEffect(.replace))`.
 - Step titles unchanged; **"Identifying each food" must remain a plain static text** (the renderer does not change the accessibility string). Keep id `analysisSteps` on the step list container.
 - Failure: steps list replaced by ember pill + "Try again" glass button; photo keeps.
@@ -194,7 +195,7 @@ Steps: Welcome → About you → Your goal → Your daily plan. The plate outlin
 ```
 ┌─────────────────────────┐
 │ (×)                (✓ Save) │  saveMeal = glassProminent leaf, top trailing
-│  ╭─ photo lens with ─╮  │
+│  ╭─ whole photo with ╮  │
 │  │ slices overlay    │  │  each food a coloured wedge outline on photo
 │  ╰───────────────────╯  │
 │        640 kcal         │  hero, id reviewTotal
