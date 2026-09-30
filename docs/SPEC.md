@@ -92,10 +92,16 @@ flowchart LR
 | LiDAR scene depth, fused over the capture sweep | Pro iPhones | height field above the table → item volume (mL), heights, plate floor — from more viewpoints |
 | Capture sweep (~1.8 s after the shot) | every AR iPhone | sharpest frames from the most different angles (`SweepSelector`) sent as extra images |
 | Vision foreground instance masks | all | separate objects (plate, bowl, cup, items) as numbered regions |
-| Vision image classification | all | quick food label hints |
+| Vision image classification | all | quick food label hints; the **food gate** (below) |
 | Vision text recognition | all | nutrition labels and packaging text, read exactly |
 | Vision barcodes → Open Food Facts | all | exact per-100 g for packaged food |
 | Blur, tilt, distance, steadiness checks | all | retake prompts and a live bubble level before the shot |
+
+**Food gate (only food is analysed)**
+
+- *Live, before capture:* with the AR camera open, `VNClassifyImageRequest` runs on a small copy of the camera image about every 0.5 s, off the main thread (no `ARFrame` is kept). `FoodPresenceDetector` (LooseweightKit) scores each frame by its strongest food label (allowlist: food, meal, dish, fruit, vegetable, bread, drink, beverage, dessert and similar; excluded look-alikes such as "food processor"), averages the last 4 frames and applies hysteresis (food at ≥ 0.30, not-food below 0.15 after at least 3 frames; in between keeps the last verdict, unknown counts as food). When not food: the pill reads "This doesn't look like food — point the camera at your meal" (`notFoodNotice`), the frame brackets turn amber, one warning haptic, and the shutter is dimmed and disabled. After 2 s an "It's food" button (`itsFoodOverride`) overrides until the camera sees food again. Without an AR camera (simulator, demo, UI tests) the gate never runs.
+- *Library photos:* the same classifier check runs on a picked photo; if it is not food, an alert offers "Choose another" or "Analyse anyway".
+- *AI backstop:* the output schema has `no_food` and `no_food_reason`. When the photo has no food or drink (or no loggable item is left) `MealAnalyzer` throws `ClaudeError.noFood`, and the analysis screen shows "No food found in this photo" with Retake. An empty review or a 0 kcal meal is never saved.
 
 **In the cloud (Claude, newest Opus model resolved at runtime from `/v1/models`)**
 
