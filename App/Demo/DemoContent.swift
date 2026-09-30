@@ -31,6 +31,9 @@ enum DemoContent {
         var polygon: [[Double]]
         var hidden = false
         var notes = ""
+        var kind: FoodKind = .food
+        var drinkUnit: DrinkUnit?
+        var mlPerUnit: Double?
     }
 
     private static let items: [DemoItem] = [
@@ -56,13 +59,18 @@ enum DemoContent {
         DemoItem(name: "Mayonnaise", query: "mayonnaise", grams: 10, low: 5, high: 15, method: .visualEstimate,
                  volume: nil, density: nil, confidence: 0.55, polygon: [], hidden: true,
                  notes: "Glossy coating on the chicken."),
+        DemoItem(name: "Orange juice", query: "orange juice raw", grams: 258, low: 235, high: 270, method: .visualEstimate,
+                 volume: 250, density: 1.03, confidence: 0.82, polygon: [], notes: "A full glass next to the plate.",
+                 kind: .drink, drinkUnit: .glass, mlPerUnit: 250),
     ]
 
-    static let groundTruthKcal = 492.0
+    /// The plate was weighed at 492 kcal (Nutrition5k); the glass of orange juice (258 g, about 45 kcal per 100 g) is added on top.
+    static let plateGroundTruthKcal = 492.0
+    static let groundTruthKcal = plateGroundTruthKcal + 258 * 0.45
 
     static func analysis(database: FoodDatabase) -> AIMealAnalysis {
         AIMealAnalysis(
-            mealTitle: "Chicken, salmon and fruit plate",
+            mealTitle: "Chicken, salmon and fruit plate with juice",
             items: items.map { item in
                 let match = database.search(item.query, limit: 1).first?.record
                 let per100g = match?.per100g ?? .zero
@@ -80,7 +88,10 @@ enum DemoContent {
                     regionNumbers: [1],
                     polygon: hasRealPhoto ? item.polygon : [],
                     isHiddenIngredient: item.hidden,
-                    notes: item.notes
+                    notes: item.notes,
+                    kind: item.kind,
+                    drinkUnit: item.drinkUnit,
+                    mlPerUnit: item.mlPerUnit
                 )
             },
             overallConfidence: 0.78,

@@ -37,6 +37,12 @@ public enum AnalysisPrompt {
        - No measurements: use visual scale (a standard dinner plate is 26–28 cm, a fork 18–20 cm, a teaspoon \
     13–15 cm, the pixel scale when given) and count pieces where you can.
        - Packaged food with readable label text or a barcode product: use those values and the pack size.
+    1b. Drinks are items too. Detect every drink in view: water, juice, soda, coffee, tea, milk, smoothies, \
+    shakes, and soups served to be drunk from a cup or mug. Give each item kind "drink" or "food". For a drink \
+    set drink_unit to its natural unit (glass, can, bottle, mug, cup; sip only when it is a small taste) and \
+    ml_per_unit to the volume one such unit holds as you see it (a can 330, a mug 300, a glass 250); grams is \
+    what is in it now (mL × density), not the empty container. Include added sugar, milk or syrup as their own \
+    items. For food set drink_unit and ml_per_unit null.
     4. Add hidden ingredients as their own items with is_hidden_ingredient true when you see signs of them: oil \
     sheen, deep-fried or pan-fried surfaces, butter, dressing, sugar in drinks. Do not add hidden items without \
     a visual reason.
@@ -161,10 +167,20 @@ public enum AnalysisPrompt {
                 ]),
                 "is_hidden_ingredient": .obj(["type": .string("boolean")]),
                 "notes": .obj(["type": .string("string")]),
+                "kind": .obj([
+                    "type": .string("string"),
+                    "enum": .array(FoodKind.allCases.map { .string($0.rawValue) }),
+                ]),
+                "drink_unit": .obj(["anyOf": .array([
+                    .obj(["type": .string("string"), "enum": .array(DrinkUnit.allCases.map { .string($0.rawValue) })]),
+                    .obj(["type": .string("null")]),
+                ])]),
+                "ml_per_unit": nullable("number"),
             ]),
             "required": .array([
                 "name", "food_id", "grams", "grams_low", "grams_high", "method", "volume_ml", "density_g_per_ml",
                 "per_100g", "confidence", "region_numbers", "polygon", "is_hidden_ingredient", "notes",
+                "kind", "drink_unit", "ml_per_unit",
             ].map(JSONValue.string)),
             "additionalProperties": .bool(false),
         ])

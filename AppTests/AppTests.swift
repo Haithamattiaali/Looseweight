@@ -7,9 +7,11 @@ import XCTest
 final class AppTests: XCTestCase {
     func testDemoEstimateUsesTheDatabaseAndMatchesTheScale() throws {
         let estimate = DemoContent.estimate()
-        XCTAssertEqual(estimate.items.count, 7)
-        XCTAssertEqual(estimate.items.filter { $0.food != nil }.count, 7, "every demo food should match the table")
-        // The plate was weighed at 492 kcal (Nutrition5k). Different nutrition tables differ a little.
+        XCTAssertEqual(estimate.items.count, 8)
+        XCTAssertEqual(estimate.items.filter { $0.food != nil }.count, 8, "every demo food should match the table")
+        XCTAssertEqual(estimate.drinks.map(\.name), ["Orange juice"], "the demo shows one drink")
+        XCTAssertEqual(estimate.drinks.first?.drinkUnit, .glass)
+        // The plate was weighed at 492 kcal (Nutrition5k), plus a glass of juice. Different nutrition tables differ a little.
         XCTAssertEqual(estimate.total.kcal, DemoContent.groundTruthKcal, accuracy: DemoContent.groundTruthKcal * 0.25)
         XCTAssertTrue(estimate.kcalRange.contains(estimate.total.kcal))
     }

@@ -38,6 +38,11 @@ public struct AIMealAnalysis: Codable, Hashable, Sendable {
         public var polygon: [[Double]]
         public var isHiddenIngredient: Bool
         public var notes: String
+        /// Food or drink. Missing in older answers: decoded as food, and the resolver checks the name.
+        public var kind: FoodKind
+        /// For drinks: the natural unit (glass, can, mug...) and its volume.
+        public var drinkUnit: DrinkUnit?
+        public var mlPerUnit: Double?
 
         enum CodingKeys: String, CodingKey {
             case name
@@ -54,11 +59,39 @@ public struct AIMealAnalysis: Codable, Hashable, Sendable {
             case polygon
             case isHiddenIngredient = "is_hidden_ingredient"
             case notes
+            case kind
+            case drinkUnit = "drink_unit"
+            case mlPerUnit = "ml_per_unit"
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            name = try c.decode(String.self, forKey: .name)
+            foodID = try c.decodeIfPresent(String.self, forKey: .foodID)
+            grams = try c.decode(Double.self, forKey: .grams)
+            gramsLow = try c.decodeIfPresent(Double.self, forKey: .gramsLow) ?? 0
+            gramsHigh = try c.decodeIfPresent(Double.self, forKey: .gramsHigh) ?? 0
+            method = (try? c.decode(PortionMethod.self, forKey: .method)) ?? .visualEstimate
+            volumeMl = try c.decodeIfPresent(Double.self, forKey: .volumeMl)
+            densityGPerMl = try c.decodeIfPresent(Double.self, forKey: .densityGPerMl)
+            per100g = try c.decode(Per100g.self, forKey: .per100g)
+            confidence = try c.decodeIfPresent(Double.self, forKey: .confidence) ?? 0.5
+            regionNumbers = try c.decodeIfPresent([Int].self, forKey: .regionNumbers) ?? []
+            polygon = try c.decodeIfPresent([[Double]].self, forKey: .polygon) ?? []
+            isHiddenIngredient = try c.decodeIfPresent(Bool.self, forKey: .isHiddenIngredient) ?? false
+            notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
+            kind = (try? c.decodeIfPresent(FoodKind.self, forKey: .kind)) ?? .food
+            drinkUnit = try? c.decodeIfPresent(DrinkUnit.self, forKey: .drinkUnit)
+            mlPerUnit = try c.decodeIfPresent(Double.self, forKey: .mlPerUnit)
         }
 
         public init(name: String, foodID: String?, grams: Double, gramsLow: Double, gramsHigh: Double, method: PortionMethod,
                     volumeMl: Double? = nil, densityGPerMl: Double? = nil, per100g: Per100g, confidence: Double,
-                    regionNumbers: [Int] = [], polygon: [[Double]] = [], isHiddenIngredient: Bool = false, notes: String = "") {
+                    regionNumbers: [Int] = [], polygon: [[Double]] = [], isHiddenIngredient: Bool = false, notes: String = "",
+                    kind: FoodKind = .food, drinkUnit: DrinkUnit? = nil, mlPerUnit: Double? = nil) {
+            self.kind = kind
+            self.drinkUnit = drinkUnit
+            self.mlPerUnit = mlPerUnit
             self.name = name
             self.foodID = foodID
             self.grams = grams
@@ -174,9 +207,41 @@ public struct EstimatedItem: Codable, Hashable, Sendable, Identifiable {
     public var flags: [ItemFlag]
     public var polygon: [[Double]]
     public var notes: String
+    public var kind: FoodKind
+    /// For drinks: the natural unit and mL in one unit (internal).
+    public var drinkUnit: DrinkUnit?
+    public var mlPerUnit: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, grams, gramsLow, gramsHigh, per100g, food, method, confidence, flags, polygon, notes, kind, drinkUnit, mlPerUnit
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decode(String.self, forKey: .name)
+        grams = try c.decode(Double.self, forKey: .grams)
+        gramsLow = try c.decodeIfPresent(Double.self, forKey: .gramsLow) ?? grams
+        gramsHigh = try c.decodeIfPresent(Double.self, forKey: .gramsHigh) ?? grams
+        per100g = try c.decode(Nutrients.self, forKey: .per100g)
+        food = try c.decodeIfPresent(FoodMatch.self, forKey: .food)
+        method = (try? c.decode(PortionMethod.self, forKey: .method)) ?? .visualEstimate
+        confidence = try c.decodeIfPresent(Double.self, forKey: .confidence) ?? 0.5
+        flags = (try? c.decodeIfPresent([ItemFlag].self, forKey: .flags)) ?? []
+        polygon = try c.decodeIfPresent([[Double]].self, forKey: .polygon) ?? []
+        notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        kind = (try? c.decodeIfPresent(FoodKind.self, forKey: .kind)) ?? (PortionSizes.isDrink(name: name) ? .drink : .food)
+        drinkUnit = try? c.decodeIfPresent(DrinkUnit.self, forKey: .drinkUnit)
+        mlPerUnit = try c.decodeIfPresent(Double.self, forKey: .mlPerUnit)
+    }
 
     public init(id: UUID = UUID(), name: String, grams: Double, gramsLow: Double, gramsHigh: Double, per100g: Nutrients,
-                food: FoodMatch?, method: PortionMethod, confidence: Double, flags: [ItemFlag] = [], polygon: [[Double]] = [], notes: String = "") {
+                food: FoodMatch?, method: PortionMethod, confidence: Double, flags: [ItemFlag] = [], polygon: [[Double]] = [], notes: String = "",
+                kind: FoodKind? = nil, drinkUnit: DrinkUnit? = nil, mlPerUnit: Double? = nil) {
+        let resolvedKind = kind ?? (PortionSizes.isDrink(name: name) ? .drink : .food)
+        self.kind = resolvedKind
+        self.drinkUnit = resolvedKind == .drink ? (drinkUnit ?? DrinkCatalog.naturalUnit(name: name)) : nil
+        self.mlPerUnit = resolvedKind == .drink ? mlPerUnit : nil
         self.id = id
         self.name = name
         self.grams = grams
@@ -192,6 +257,7 @@ public struct EstimatedItem: Codable, Hashable, Sendable, Identifiable {
     }
 
     public var nutrients: Nutrients { per100g.amount(forGrams: grams) }
+    public var isDrink: Bool { kind == .drink }
     public var kcalRange: ClosedRange<Double> {
         (per100g.kcal * gramsLow / 100)...(per100g.kcal * gramsHigh / 100)
     }
@@ -218,6 +284,7 @@ public struct MealEstimate: Codable, Hashable, Sendable {
     }
 
     public var total: Nutrients { items.map(\.nutrients).sum() }
+    public var drinks: [EstimatedItem] { items.filter(\.isDrink) }
 
     /// Sum of item ranges (a conservative envelope).
     public var kcalRange: ClosedRange<Double> {
@@ -271,6 +338,16 @@ public enum NutritionResolver {
                 flags.append(.aiEstimate)
             }
 
+            // Drinks: trust the answer's kind, and catch drinks it labelled as food by name.
+            let kind: FoodKind = item.kind == .drink || PortionSizes.isDrink(name: item.name) ? .drink : .food
+            var drinkUnit: DrinkUnit?
+            var mlPerUnit: Double?
+            if kind == .drink {
+                let unit = item.drinkUnit ?? DrinkCatalog.naturalUnit(name: item.name)
+                drinkUnit = unit
+                if let ml = item.mlPerUnit, ml.isFinite, ml >= 5, ml <= 2_000 { mlPerUnit = ml } else { mlPerUnit = unit.defaultMl }
+            }
+
             return EstimatedItem(
                 name: item.name,
                 grams: grams.rounded(),
@@ -282,7 +359,10 @@ public enum NutritionResolver {
                 confidence: item.confidence.clamped(to: 0...1),
                 flags: flags,
                 polygon: item.polygon,
-                notes: item.notes
+                notes: item.notes,
+                kind: kind,
+                drinkUnit: drinkUnit,
+                mlPerUnit: mlPerUnit
             )
         }
         return MealEstimate(

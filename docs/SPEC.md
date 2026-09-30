@@ -50,6 +50,12 @@ Settings row: **Units: Everyday (bites, sips, pieces) / Precise (grams)** with a
 - Portion sizes (`PortionSizes`): drinks → sips of ~20 mL; small countable foods (cherry tomatoes, nuggets, dates,
   falafel…) → pieces; one big item (a chicken breast, a fillet, a sandwich, a banana) → fraction of the piece;
   sauces/oil → fraction of the sauce; everything else → bites (rice/pasta/meat ~15 g, vegetables ~12 g, nuts ~8 g).
+- **Drinks are first-class.** The analysis answer gives every item `kind: food|drink`; drinks also get
+  `drink_unit` (sip / cup / glass / can / bottle / mug) and `ml_per_unit`. The prompt asks for every drink in view
+  (water, juice, soda, coffee, tea, milk, smoothies, shakes, soups served to drink). `NutritionResolver` also catches
+  drinks by name, falls back to the unit's default volume (glass 250, can 330, mug 300, cup 240, bottle 500 mL) and
+  keeps mL internal. A drink is counted in sips (~20 mL) and, for a whole amount, in its container ("1 glass",
+  "1 1/2 cans"). The on-device food gate accepts cups, mugs, glasses, bottles and cans. The demo meal has a glass of juice.
 - `PlannedMeal` + `PlanConfirmation` (pending / ate as planned / ate part / didn't eat) + `PlanInbox` reminder rules
   live in LooseweightKit; the app stores them as `PlannedMealRecord` (SwiftData) and logs the eaten share on confirmation.
 

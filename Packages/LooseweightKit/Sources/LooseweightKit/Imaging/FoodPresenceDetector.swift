@@ -24,6 +24,10 @@ public struct FoodPresenceDetector: Sendable {
         "berry", "berries", "grape", "grapes", "strawberry", "tomato", "potato", "carrot", "broccoli", "lettuce",
         "mushroom", "corn", "avocado", "melon", "watermelon", "pineapple", "mango", "date", "dates", "breakfast",
         "lunch", "dinner", "brunch", "barbecue", "grill", "kabsa", "biryani",
+        // Drinks and what they come in.
+        "cup", "cups", "mug", "mugs", "teacup", "glass", "glasses", "wineglass", "tumbler", "bottle", "bottles",
+        "can", "cans", "carton", "jug", "pitcher", "latte", "cappuccino", "espresso", "lemonade", "shake", "cola",
+        "kombucha", "broth", "cocoa", "drinking", "straw", "thermos", "flask", "teapot",
     ]
 
     /// Labels that contain a food word but are not food.
@@ -31,6 +35,8 @@ public struct FoodPresenceDetector: Sendable {
         "food processor", "food truck", "food court", "ice skating", "ice hockey", "ice rink", "orange sky",
         "water body", "waterfall", "water sport", "underwater", "grill appliance", "date palm", "fish tank", "aquarium",
         "coffee table", "coffee maker", "tea kettle", "wine rack", "beer tap", "ice", "water", "cream colored",
+        "glass window", "stained glass", "glass building", "can opener", "trash can", "garbage can", "kettle",
+        "straw hat", "shake hands", "eye glasses", "eyeglasses", "sunglasses", "glasses frame",
     ]
 
     /// A frame counts as food when its strongest food label reaches this confidence.

@@ -39,7 +39,7 @@ struct PortionSizeTests {
             let profile = PortionSizes.profile(name: name, grams: 120)
             for grams in [0.0, 8, 40, 120, 300] {
                 let text = profile.describe(grams: grams)
-                #expect(!text.contains(" g") && !text.contains("gram"), "\(name): \(text)")
+                #expect(text.range(of: #"\d\s?g\b"#, options: .regularExpression) == nil && !text.contains("gram"), "\(name): \(text)")
             }
         }
     }
@@ -91,7 +91,7 @@ struct MealPlannerTests {
         let plan = MealPlanner.plan(Self.plate, remaining: Nutrients(kcal: 520, protein: 40, carbs: 55, fat: 20))
         for portion in plan.portions {
             let text = portion.instruction
-            #expect(!text.contains(" g") && !text.lowercased().contains("gram"), "\(text)")
+            #expect(text.range(of: #"\d\s?g\b"#, options: .regularExpression) == nil && !text.lowercased().contains("gram"), "\(text)")
         }
         let rice = portion(plan, "White rice").instruction
         #expect(rice == "Skip" || rice == "All of it" || rice.hasSuffix("bites") || rice.hasSuffix("bite"))
@@ -202,4 +202,92 @@ struct SweepSelectorTests {
 
 extension Int {
     var doubleValue: Double { Double(self) }
+}
+
+@Suite("Drinks are first-class")
+struct DrinkTests {
+    @Test func namesMapToNaturalUnits() {
+        #expect(DrinkCatalog.naturalUnit(name: "Cola") == .can)
+        #expect(DrinkCatalog.naturalUnit(name: "Cafe latte") == .mug)
+        #expect(DrinkCatalog.naturalUnit(name: "Green tea") == .mug)
+        #expect(DrinkCatalog.naturalUnit(name: "Mango smoothie") == .cup)
+        #expect(DrinkCatalog.naturalUnit(name: "Orange juice") == .glass)
+        #expect(DrinkCatalog.naturalUnit(name: "Bottled water") == .bottle)
+        for name in ["Water", "Orange juice", "Coffee", "Iced tea", "Milk", "Strawberry smoothie", "Protein shake", "Sparkling water", "Cola"] {
+            #expect(PortionSizes.isDrink(name: name), "\(name)")
+        }
+        for name in ["Watermelon", "Steak", "Milk chocolate bar", "Teriyaki chicken"] {
+            #expect(!PortionSizes.isDrink(name: name), "\(name)")
+        }
+    }
+
+    @Test func drinkProfilesCountSipsAndContainers() {
+        let glass = PortionSizes.drinkProfile(unit: .glass, mlPerUnit: 250)
+        #expect(glass.unit == .sip)
+        #expect(glass.describe(grams: 5 * 20 * 1.03) == "5 sips")
+        #expect(glass.describe(grams: 250 * 1.03) == "1 glass")
+        #expect(glass.describe(grams: 375 * 1.03) == "1 1/2 glasses")
+        let can = PortionSizes.drinkProfile(unit: .can, mlPerUnit: nil)
+        #expect(can.containerGrams == 330 * 1.03)
+        #expect(can.describe(grams: 660 * 1.03) == "2 cans")
+    }
+
+    @Test func resolverMarksDrinksWithUnits() {
+        let per = AIMealAnalysis.Per100g(kcal: 42, proteinG: 0, carbsG: 10.6, fatG: 0)
+        let analysis = AIMealAnalysis(mealTitle: "t", items: [
+            .init(name: "Cola", foodID: nil, grams: 340, gramsLow: 330, gramsHigh: 345, method: .label, per100g: per, confidence: 0.9,
+                  kind: .drink, drinkUnit: .can, mlPerUnit: 330),
+            .init(name: "Lentil soup", foodID: nil, grams: 300, gramsLow: 250, gramsHigh: 350, method: .visualEstimate, per100g: per, confidence: 0.7,
+                  kind: .drink, drinkUnit: .mug, mlPerUnit: 99_999),
+            .init(name: "Iced coffee", foodID: nil, grams: 300, gramsLow: 250, gramsHigh: 350, method: .visualEstimate, per100g: per, confidence: 0.7),
+            .init(name: "Rice", foodID: nil, grams: 150, gramsLow: 120, gramsHigh: 180, method: .visualEstimate, per100g: per, confidence: 0.7),
+        ], overallConfidence: 0.8)
+        let estimate = NutritionResolver.resolve(analysis, database: .shared)
+        #expect(estimate.items.map(\.kind) == [.drink, .drink, .drink, .food])
+        #expect(estimate.items[0].drinkUnit == .can && estimate.items[0].mlPerUnit == 330)
+        #expect(estimate.items[1].mlPerUnit == DrinkUnit.mug.defaultMl, "absurd volumes fall back to the unit default")
+        #expect(estimate.items[2].drinkUnit == .mug, "a drink named as food is still caught")
+        #expect(estimate.items[3].drinkUnit == nil)
+        #expect(estimate.items[1].portionProfile.unit == .sip, "soup served as a drink is sipped")
+        #expect(estimate.items[0].portionProfile.describe(grams: estimate.items[0].grams) == "1 can")
+        #expect(estimate.drinks.count == 3)
+    }
+
+    @Test func answersWithoutKindStillDecode() throws {
+        let text = #"{"meal_title":"x","items":[{"name":"Tea","food_id":null,"grams":250,"grams_low":200,"grams_high":300,"method":"visual_estimate","volume_ml":null,"density_g_per_ml":null,"per_100g":{"kcal":1,"protein_g":0,"carbs_g":0,"fat_g":0},"confidence":0.8,"region_numbers":[],"polygon":[],"is_hidden_ingredient":false,"notes":""}],"overall_confidence":0.5,"clarifying_question":null,"warnings":[]}"#
+        let analysis = try AIMealAnalysis.decode(from: text)
+        #expect(analysis.items[0].kind == .food)
+        let estimate = NutritionResolver.resolve(analysis, database: .shared)
+        #expect(estimate.items[0].kind == .drink && estimate.items[0].drinkUnit == .mug)
+        let withKind = text.replacingOccurrences(of: #""notes":"""#, with: #""notes":"","kind":"drink","drink_unit":"cup","ml_per_unit":240"#)
+        let decoded = try AIMealAnalysis.decode(from: withKind)
+        #expect(decoded.items[0].kind == .drink && decoded.items[0].drinkUnit == .cup && decoded.items[0].mlPerUnit == 240)
+    }
+
+    @Test func storedItemsWithoutKindDecode() throws {
+        let item = EstimatedItem(name: "Milk", grams: 200, gramsLow: 180, gramsHigh: 220, per100g: .zero, food: nil, method: .visualEstimate, confidence: 1)
+        #expect(item.kind == .drink && item.drinkUnit == .glass)
+        let data = try JSONEncoder().encode(item)
+        #expect(try JSONDecoder().decode(EstimatedItem.self, from: data) == item)
+        var object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        object["kind"] = nil
+        object["drinkUnit"] = nil
+        let old = try JSONDecoder().decode(EstimatedItem.self, from: JSONSerialization.data(withJSONObject: object))
+        #expect(old.kind == .drink)
+        let profile = PortionProfile(unit: .bite, unitGrams: 15)
+        let legacy = #"{"unit":"bite","unitGrams":15,"wholeNoun":"piece"}"#
+        #expect(try JSONDecoder().decode(PortionProfile.self, from: Data(legacy.utf8)) == profile)
+    }
+
+    @Test func demoJuiceIsInTheTable() throws {
+        let record = try #require(FoodDatabase.shared.search("orange juice raw", limit: 1).first?.record)
+        #expect(record.name.lowercased().contains("juice"))
+    }
+
+    @Test func schemaAsksForKindAndDrinkUnit() {
+        let item = AnalysisPrompt.outputSchema["properties"]?["items"]?["items"]
+        let required = item?["required"]?.arrayValue?.compactMap(\.stringValue) ?? []
+        #expect(required.contains("kind") && required.contains("drink_unit") && required.contains("ml_per_unit"))
+        #expect(AnalysisPrompt.system.contains("drink_unit"))
+    }
 }

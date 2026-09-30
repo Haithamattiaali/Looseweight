@@ -113,3 +113,14 @@ struct NoFoodAnalysisTests {
         }
     }
 }
+
+struct DrinkGateTests {
+    @Test func drinksAndTheirContainersPassTheGate() {
+        for label in ["cup", "Coffee", "tea", "mug", "wine_glass", "glass", "bottle", "water_bottle", "juice", "smoothie", "milk", "soda", "can", "drinking_glass", "latte"] {
+            #expect(FoodPresenceDetector.isFoodLabel(label), "\(label)")
+        }
+        for label in ["trash_can", "sunglasses", "eyeglasses", "stained_glass", "water", "coffee_table"] {
+            #expect(!FoodPresenceDetector.isFoodLabel(label), "\(label)")
+        }
+    }
+}
