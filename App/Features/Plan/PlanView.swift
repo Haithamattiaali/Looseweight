@@ -172,6 +172,7 @@ struct PlanRow: View {
         }
         .padding(Theme.m)
         .glassSurface(tint: portion.isSkipped ? nil : color)
+        .accessibilityElement(children: .contain)
     }
 
     private var color: Color { Theme.foodColor(for: portion.name, isDrink: portion.profile.isDrink) }

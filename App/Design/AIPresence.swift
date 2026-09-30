@@ -127,7 +127,11 @@ extension View {
 
     /// A Liquid Glass surface floating over the colour ground, tinted by `tint`.
     func glassSurface(tint: Color? = nil, radius: CGFloat = Theme.controlRadius) -> some View {
-        modifier(ControlGlass(tint: tint, shape: RoundedRectangle(cornerRadius: radius, style: .continuous)))
+        // Glass sits behind the content rather than wrapping it, so controls inside a surface
+        // (unit sliders on Plan rows) stay separate, reachable accessibility elements.
+        background {
+            Color.clear.modifier(ControlGlass(tint: tint, shape: RoundedRectangle(cornerRadius: radius, style: .continuous)))
+        }
     }
 
     /// Soft coloured glow under vivid elements.
