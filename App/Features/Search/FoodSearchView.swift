@@ -2,12 +2,13 @@ import LooseweightKit
 import SwiftData
 import SwiftUI
 
-/// Manual add: search the food table, pick how many servings (no scale, no grams — servings, pieces, bites).
+/// Manual add: search the food table, pick how many servings (Everyday: servings, pieces, bites; Precise adds grams).
 struct FoodSearchView: View {
     var onPick: ((FoodRecord, Double) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
+    @Environment(\.unitsMode) private var unitsMode
     @State private var query = ""
     @State private var results: [FoodRecord] = []
     @State private var chosen: FoodRecord?
@@ -76,7 +77,7 @@ struct FoodSearchView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(record.name).font(.body.weight(.medium)).foregroundStyle(Theme.ink)
-                        Text(record.category).font(.caption).foregroundStyle(Theme.inkTertiary)
+                        Text(categoryLine(record)).font(.caption).foregroundStyle(Theme.inkTertiary)
                     }
                     Spacer()
                     Text("\(Int(record.per100g.amount(forGrams: Self.servingGrams(record)).kcal.rounded())) kcal a serving")
@@ -98,6 +99,18 @@ struct FoodSearchView: View {
         }
     }
 
+    private func categoryLine(_ record: FoodRecord) -> String {
+        guard let per100 = AmountFormatter(mode: unitsMode).kcalPer100g(record.per100g.kcal) else { return record.category }
+        return "\(record.category) · \(per100)"
+    }
+
+    private func gramsBinding(_ record: FoodRecord) -> Binding<Double> {
+        Binding(
+            get: { servings * Self.servingGrams(record) },
+            set: { servings = max($0, 1) / Self.servingGrams(record) }
+        )
+    }
+
     static func servingGrams(_ record: FoodRecord) -> Double {
         PortionSizes.servingGrams(name: record.name, category: record.category)
     }
@@ -111,7 +124,7 @@ struct FoodSearchView: View {
         return VStack(alignment: .leading, spacing: Theme.s) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(Self.servingsText(servings))
+                    Text(AmountFormatter(mode: unitsMode).servings(servings, grams: grams(for: record)))
                         .font(.system(.title2, design: .rounded, weight: .semibold))
                         .monospacedDigit()
                         .contentTransition(.numericText(value: servings))

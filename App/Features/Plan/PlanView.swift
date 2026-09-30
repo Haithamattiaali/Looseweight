@@ -111,24 +111,10 @@ private struct PlanHeader: View {
                 .foregroundStyle(Theme.ink)
                 .multilineTextAlignment(.center)
                 .padding(.top, Theme.xxs)
-            HStack(spacing: Theme.l) {
-                macro("Protein", plan.total.protein, Theme.protein)
-                macro("Carbs", plan.total.carbs, Theme.carbs)
-                macro("Fat", plan.total.fat, Theme.fat)
-            }
-            .padding(.top, Theme.xs)
+            MealMacrosRow(total: plan.total)
+                .padding(.top, Theme.xs)
         }
         .frame(maxWidth: .infinity)
-    }
-
-    private func macro(_ title: String, _ grams: Double, _ color: Color) -> some View {
-        VStack(spacing: 2) {
-            LabelText(title, color: color)
-            Text(grams.gramsText)
-                .font(.subheadline.weight(.semibold))
-                .monospacedDigit()
-                .foregroundStyle(Theme.ink)
-        }
     }
 }
 
@@ -150,6 +136,9 @@ struct PlanList: View {
 
 struct PlanRow: View {
     let portion: PlannedPortion
+    @Environment(\.unitsMode) private var unitsMode
+
+    private var instruction: String { AmountFormatter(mode: unitsMode).instruction(portion) }
 
     var body: some View {
         HStack(alignment: .center, spacing: Theme.s) {
@@ -169,7 +158,7 @@ struct PlanRow: View {
             }
             Spacer(minLength: Theme.xs)
             VStack(alignment: .trailing, spacing: 2) {
-                Text(portion.instruction)
+                Text(instruction)
                     .font(.numeric)
                     .foregroundStyle(portion.isSkipped ? Theme.inkTertiary : Theme.ink)
                     .multilineTextAlignment(.trailing)
@@ -182,6 +171,6 @@ struct PlanRow: View {
         }
         .padding(.vertical, Theme.s)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(portion.name): \(portion.instruction)")
+        .accessibilityLabel("\(portion.name): \(instruction)")
     }
 }

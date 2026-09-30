@@ -168,25 +168,11 @@ private struct ReviewTotal: View {
                         .accessibilityLabel("Measured in 3D")
                 }
             }
-            HStack(spacing: Theme.l) {
-                macro("Protein", total.protein, Theme.protein)
-                macro("Carbs", total.carbs, Theme.carbs)
-                macro("Fat", total.fat, Theme.fat)
-            }
+            MealMacrosRow(total: total)
             .padding(.top, Theme.xs)
         }
         .frame(maxWidth: .infinity)
         .animation(Theme.snap, value: total.kcal)
-    }
-
-    private func macro(_ title: String, _ grams: Double, _ color: Color) -> some View {
-        VStack(spacing: 2) {
-            LabelText(title, color: color)
-            Text(grams.gramsText)
-                .font(.subheadline.weight(.semibold))
-                .monospacedDigit()
-                .foregroundStyle(Theme.ink)
-        }
     }
 }
 
@@ -247,6 +233,7 @@ private struct ItemRow: View {
     var profile: PortionProfile
     var isSelected: Bool
     var onTap: () -> Void
+    @Environment(\.unitsMode) private var unitsMode
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.s) {
@@ -275,7 +262,7 @@ private struct ItemRow: View {
                 }
             }
             Spacer(minLength: Theme.xs)
-            Text(profile.describe(grams: item.grams))
+            Text(AmountFormatter(mode: unitsMode).amount(grams: item.grams, profile: profile))
                 .font(.subheadline)
                 .monospacedDigit()
                 .foregroundStyle(Theme.inkSecondary)
@@ -302,6 +289,9 @@ private struct ItemRow: View {
 private struct PortionEditor: View {
     @Binding var item: EstimatedItem
     var profile: PortionProfile
+    @Environment(\.unitsMode) private var unitsMode
+
+    private var amounts: AmountFormatter { AmountFormatter(mode: unitsMode) }
 
     private var sliderRange: ClosedRange<Double> {
         let low = max(0, min(item.gramsLow, item.grams) * 0.5)
@@ -318,9 +308,9 @@ private struct PortionEditor: View {
                 .background(alignment: .leading) { rangeBand }
                 .sensoryFeedback(.selection, trigger: Int(profile.count(forGrams: item.grams) * (profile.unit == .whole ? 4 : 1)))
                 .accessibilityLabel("Portion of \(item.name)")
-                .accessibilityValue(profile.describe(grams: item.grams))
+                .accessibilityValue(amounts.amount(grams: item.grams, profile: profile))
             HStack {
-                Text("likely \(profile.describe(grams: item.gramsLow, approximate: false)) to \(profile.describe(grams: item.gramsHigh, approximate: false))")
+                Text(amounts.range(low: item.gramsLow, high: item.gramsHigh, profile: profile))
                     .font(.caption)
                     .monospacedDigit()
                     .foregroundStyle(Theme.inkSecondary)
@@ -333,6 +323,9 @@ private struct PortionEditor: View {
                 }
             }
             stepButtons
+            if unitsMode.showsGrams {
+                GramEntryField(grams: $item.grams)
+            }
             if !item.notes.isEmpty {
                 Text(item.notes)
                     .font(.footnote)

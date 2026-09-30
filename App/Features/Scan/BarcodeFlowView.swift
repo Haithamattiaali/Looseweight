@@ -11,6 +11,7 @@ struct BarcodeFlowView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
+    @Environment(\.unitsMode) private var unitsMode
     @State private var code: String?
     @State private var product: FoodRecord?
     @State private var lookupFailed = false
@@ -64,15 +65,21 @@ struct BarcodeFlowView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Text(product.name).font(.rounded(.title3, weight: .bold))
                 let serving = product.per100g.amount(forGrams: servingGrams(product))
-                Text("Per serving: \(Int(serving.kcal.rounded())) kcal · Protein \(serving.protein.oneDecimal) · Carbs \(serving.carbs.oneDecimal) · Fat \(serving.fat.oneDecimal)")
+                Text(servingLine(product, serving: serving))
                     .font(.rounded(.caption)).foregroundStyle(.secondary)
                 HStack {
-                    Text(FoodSearchView.servingsText(servings))
+                    Text(amounts.servings(servings, grams: grams(product)))
                         .font(.rounded(.title2, weight: .bold))
                         .monospacedDigit()
                     Stepper("Servings eaten", value: $servings, in: 0.5...20, step: 0.5).labelsHidden()
                     Spacer()
                     Text(product.per100g.amount(forGrams: grams(product)).kcal.kcalText).font(.rounded(.title3, weight: .bold)).foregroundStyle(Theme.ink)
+                }
+                if unitsMode.showsGrams {
+                    GramEntryField(grams: Binding(
+                        get: { grams(product) },
+                        set: { servings = max($0, 1) / servingGrams(product) }
+                    ))
                 }
                 Button {
                     let amount = grams(product)
@@ -95,6 +102,21 @@ struct BarcodeFlowView: View {
         }
         .padding(Theme.m)
         .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private var amounts: AmountFormatter { AmountFormatter(mode: unitsMode) }
+
+    /// Everyday: "Per serving: 180 kcal". Precise adds macros in grams and kcal per 100 g.
+    private func servingLine(_ product: FoodRecord, serving: Nutrients) -> String {
+        var line = "Per serving: \(Int(serving.kcal.rounded())) kcal"
+        if unitsMode.showsGrams {
+            let protein = amounts.gramsText(serving.protein) ?? ""
+            let carbs = amounts.gramsText(serving.carbs) ?? ""
+            let fat = amounts.gramsText(serving.fat) ?? ""
+            line += " · Protein \(protein) · Carbs \(carbs) · Fat \(fat)"
+            if let per100 = amounts.kcalPer100g(product.per100g.kcal) { line += " · \(per100)" }
+        }
+        return line
     }
 
     private func servingGrams(_ product: FoodRecord) -> Double {

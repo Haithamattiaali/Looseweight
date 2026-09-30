@@ -117,6 +117,7 @@ struct PlannedMealCard: View {
 /// "Rice · 6 bites" lines for the foods the plan kept.
 private struct PlanSummaryLines: View {
     let portions: [PlannedPortion]
+    @Environment(\.unitsMode) private var unitsMode
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -125,7 +126,7 @@ private struct PlanSummaryLines: View {
                     Text(portion.name)
                         .foregroundStyle(portion.isSkipped ? Theme.inkTertiary : Theme.inkSecondary)
                     Spacer()
-                    Text(portion.instruction)
+                    Text(AmountFormatter(mode: unitsMode).instruction(portion))
                         .fontWeight(.semibold)
                         .foregroundStyle(portion.isSkipped ? Theme.inkTertiary : Theme.ink)
                 }

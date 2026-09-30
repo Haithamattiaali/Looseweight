@@ -118,6 +118,10 @@ struct TodayView: View {
                 .monospacedDigit()
                 .foregroundStyle(Theme.inkSecondary)
                 .contentTransition(.numericText(value: eaten.kcal))
+            if !todaysMeals.isEmpty {
+                DayMacrosRow(macros: macros)
+                    .padding(.top, Theme.xxs)
+            }
         }
         .padding(.top, Theme.m)
         .animation(Theme.fill, value: eaten.kcal)
