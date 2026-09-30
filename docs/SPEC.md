@@ -3,15 +3,16 @@
 > Goal (owner's words): *"an app that will enable users to lose weight by just logging the calories accurately by camera (very accurately). The app UI is iOS Liquid Glass."*
 >
 > Product shape: **Log or Plan.** Every meal photo is either a log (what I ate) or a plan (what I'm about to eat).
-> **No weights anywhere in the user experience**: people see bites, sips, pieces, servings and fractions of an
-> item, never grams and never a kitchen scale. Grams exist only inside the engine.
+> **Units are a setting with two modes** (see §1b). **Everyday** (default, the only mode onboarding teaches):
+> bites, sips, pieces, servings and fractions of an item — no grams anywhere, not for food and not for macros.
+> **Precise** (opt-in in Settings) adds grams. Grams always exist inside the engine.
 
 ## 1. What the user does
 
 | Step | Screen | What happens |
 |---|---|---|
-| 1 | Onboarding | Sex, age, height, weight, goal weight, activity, pace → daily calorie target |
-| 2 | Today | The plate (kcal left), protein / carbs / fat, confirmed meals of the day |
+| 1 | Onboarding | Welcome, "Count food the way you eat it" (bites, sips, pieces, a share, servings), sex, age, height, weight, goal weight, activity, pace → daily calorie target. Never mentions food weights |
+| 2 | Today | The plate (kcal left), protein / carbs / fat as rim arcs and bars with "on track / a little short / short / over", confirmed meals of the day |
 | 3 | Scan | Camera. Hold the phone flat over the plate and tap. A ~1.8 s sweep follows (like a Live Photo): LiDAR depth keeps fusing from every angle and extra views are collected |
 | 4 | Analyzing + choice | While Claude finds and measures every food, two glass buttons ask: **Log** (what I ate) or **Plan** (what I'm about to eat) |
 | 5a | Review (Log) | Each item as "about 7 bites", "5 sips", "6 pieces" or "2/3 of the piece", with range and confidence. Nudge ±1 bite/sip/piece or ¼ of the item. Save → counts today |
@@ -20,7 +21,24 @@
 | 7 | Reminder | A gentle sheet at the next app open (plan ≥ 15 min old) and a local notification about an hour after planning |
 | 8 | Progress | Weight log, trend line, real daily burn (learned from your data), goal date |
 
-Barcode and manual search add food by **servings** (½ steps), shown with a bites/sips/pieces hint. There is no grams field anywhere.
+Barcode and manual search add food by **servings** (½ steps), shown with a bites/sips/pieces hint. In Everyday there is no grams field anywhere; Precise adds one.
+
+## 1b. Units modes (`UnitsMode`, `AmountFormatter`)
+
+One setting, one formatter. `UnitsMode` (`everyday` default, `precise`) is stored by `AppModel` in UserDefaults
+(`lw.unitsMode`, cleared by `-resetState`) and passed to every view as `\.unitsMode`. `AmountFormatter` in
+LooseweightKit (Foundation only) turns internal grams into text for either mode; every screen and the CSV export use it.
+Settings row: **Units: Everyday (bites, sips, pieces) / Precise (grams)** with a one-line explanation.
+
+| Screen | Everyday | Precise adds |
+|---|---|---|
+| Onboarding | Counting step; macro targets as "% of calories" | (onboarding never offers Precise; editing the profile later shows "120 g") |
+| Today | Macro bars + "on track / a little short / short / over" | "62 of 120 g · on track" |
+| Review | "about 7 bites", "likely 5 bites to 9 bites", macros as "% of your day" bars | "· 84 g" on amounts and ranges, grams field in the editor, macro grams |
+| Plan / Inbox | "6 bites", "2/3 of the piece", "Skip"; plan macros as "% of your day" | "· 90 g" after each instruction, macro grams |
+| Search / Barcode | "1½ servings" + bites hint, kcal a serving | "· 225 g", grams field, kcal per 100 g, barcode macros in grams |
+| Progress | Body weight only (no food amounts) | — |
+| CSV export | `date,meal,food,portion,kcal,method` | `grams,protein_g,carbs_g,fat_g` columns |
 
 ## 1a. Planning (MealPlanner)
 
