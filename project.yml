@@ -1,0 +1,97 @@
+name: Looseweight
+options:
+  bundleIdPrefix: io.github.haithamattiaali
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+
+packages:
+  LooseweightKit:
+    path: Packages/LooseweightKit
+
+targets:
+  Looseweight:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+    dependencies:
+      - package: LooseweightKit
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Looseweight
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIApplicationSupportsIndirectInputEvents: true
+        ITSAppUsesNonExemptEncryption: false
+        NSCameraUsageDescription: Looseweight uses the camera, depth sensor and ARKit to measure the food on your plate.
+        NSPhotoLibraryUsageDescription: Choose a meal photo to analyse.
+        LWProxyURL: $(LW_PROXY_URL)
+        LWProxyToken: $(LW_PROXY_TOKEN)
+        LWAnthropicKey: $(LW_ANTHROPIC_KEY)
+    configFiles:
+      Debug: Config/App.xcconfig
+      Release: Config/App.xcconfig
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.haithamattiaali.looseweight
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        LW_PROXY_URL: ""
+        LW_PROXY_TOKEN: ""
+
+  LooseweightTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: AppTests
+    dependencies:
+      - target: Looseweight
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.haithamattiaali.looseweight.tests
+
+  LooseweightUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: AppUITests
+    dependencies:
+      - target: Looseweight
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.haithamattiaali.looseweight.uitests
+        TEST_TARGET_NAME: Looseweight
+
+schemes:
+  Looseweight:
+    build:
+      targets:
+        Looseweight: all
+        LooseweightTests: [test]
+        LooseweightUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - LooseweightTests
+        - LooseweightUITests

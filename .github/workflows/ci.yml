@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_eval:
+        description: Run the paid AI accuracy check (needs the ANTHROPIC_API_KEY secret)
+        type: boolean
+        default: false
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Core engine · Linux
+    runs-on: ubuntu-latest
+    container: swift:6.4-noble
+    steps:
+      - uses: actions/checkout@v5
+      - run: bash scripts/ci/linux.sh
+
+  proxy:
+    name: API proxy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: bash scripts/ci/proxy.sh
+
+  ios:
+    name: iPhone app · build, tests, screenshots
+    runs-on: macos-latest
+    timeout-minutes: 90
+    env:
+      RUN_EVAL: ${{ inputs.run_eval || false }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - run: bash scripts/ci/macos.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: proof
+          path: ci-output/
+          if-no-files-found: ignore

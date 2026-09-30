@@ -1,0 +1,5 @@
+// Build settings for the app target. Personal values go in Config/Secrets.xcconfig (git-ignored):
+//   LW_ANTHROPIC_KEY = sk-ant-...
+// scripts/set_api_key.sh writes that file for you.
+LW_ANTHROPIC_KEY =
+#include? "Secrets.xcconfig"
