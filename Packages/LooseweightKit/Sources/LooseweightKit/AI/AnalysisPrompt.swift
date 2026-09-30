@@ -265,11 +265,20 @@ public enum AnalysisPrompt {
         ])
     }
 
-    static func userMessage(photoJPEG: Data, overlayJPEG: Data?, insights: CaptureInsights) -> JSONValue {
+    static func userMessage(photoJPEG: Data, overlayJPEG: Data?, extraViewJPEGs: [Data] = [], insights: CaptureInsights) -> JSONValue {
         var content: [JSONValue] = [.obj(["type": .string("text"), "text": .string("Image 1 — meal photo:")]), imageBlock(jpeg: photoJPEG)]
+        var number = 2
         if let overlayJPEG {
             content.append(.obj(["type": .string("text"), "text": .string("Image 2 — on-device regions and 5 cm scale bar:")]))
             content.append(imageBlock(jpeg: overlayJPEG))
+            number = 3
+        }
+        for view in extraViewJPEGs.prefix(3) {
+            content.append(.obj(["type": .string("text"), "text": .string(
+                "Image \(number) — the same plate from another angle during the capture sweep (use it to see hidden sides, "
+                    + "heights and counts; do not count any food twice; polygons and regions refer to Image 1 only):")]))
+            content.append(imageBlock(jpeg: view))
+            number += 1
         }
         content.append(.obj(["type": .string("text"), "text": .string(report(for: insights))]))
         return .obj(["role": .string("user"), "content": .array(content)])

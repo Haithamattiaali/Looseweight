@@ -32,6 +32,8 @@ public enum AnalysisEffort: String, Codable, CaseIterable, Sendable {
 public struct AnalysisRequest: Sendable {
     public var photoJPEG: Data
     public var overlayJPEG: Data?
+    /// Extra sharp views of the same plate from the capture sweep (other angles), best first.
+    public var extraViewJPEGs: [Data]
     public var insights: CaptureInsights
     public var measurement: MeasurementContext?
     public var zoomer: PhotoZooming?
@@ -40,8 +42,9 @@ public struct AnalysisRequest: Sendable {
     public var effort: AnalysisEffort
 
     public init(photoJPEG: Data, overlayJPEG: Data? = nil, insights: CaptureInsights, measurement: MeasurementContext? = nil,
-                zoomer: PhotoZooming? = nil, extraFoods: [FoodRecord] = [], effort: AnalysisEffort = .high) {
+                zoomer: PhotoZooming? = nil, extraFoods: [FoodRecord] = [], effort: AnalysisEffort = .high, extraViewJPEGs: [Data] = []) {
         self.photoJPEG = photoJPEG
+        self.extraViewJPEGs = extraViewJPEGs
         self.overlayJPEG = overlayJPEG
         self.insights = insights
         self.measurement = measurement
@@ -107,7 +110,7 @@ public struct MealAnalyzer: Sendable {
         if request.measurement != nil { tools.append(AnalysisPrompt.measureTool) }
         if request.zoomer != nil { tools.append(AnalysisPrompt.zoomTool) }
 
-        var messages: [JSONValue] = [AnalysisPrompt.userMessage(photoJPEG: request.photoJPEG, overlayJPEG: request.overlayJPEG, insights: request.insights)]
+        var messages: [JSONValue] = [AnalysisPrompt.userMessage(photoJPEG: request.photoJPEG, overlayJPEG: request.overlayJPEG, extraViewJPEGs: request.extraViewJPEGs, insights: request.insights)]
         var usage = TokenUsage()
         var useFallbacks = true
         var useSystemBreakpoint = true
