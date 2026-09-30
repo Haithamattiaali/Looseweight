@@ -39,6 +39,12 @@ final class ARCaptureController: NSObject {
     static var isSupported: Bool { ARWorldTrackingConfiguration.isSupported }
     let hasLiDAR = ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth)
     private(set) var guidance = Guidance()
+    /// 0...1 while the short capture sweep runs (like a Live Photo), nil otherwise.
+    private(set) var sweepProgress: Double?
+
+    /// Length of the capture sweep. Depth keeps fusing and extra views are collected during it.
+    static let sweepSeconds = 1.8
+    private static let sweepInterval = 0.2
 
     let arView: ARView
     private let depthBuffer = DepthBuffer()
@@ -93,7 +99,8 @@ final class ARCaptureController: NSObject {
         let image = Self.uprightImage(from: frame.capturedImage, orientation: .right)
         let photoCamera = Self.cameraPose(of: frame.camera)
         let photo = PhotoGeometry(camera: photoCamera, orientation: orientation)
-        let depthFrames = depthBuffer.recent(seconds: 2.5)
+        let extraViews = await sweep(main: frame)
+        let depthFrames = depthBuffer.recent(seconds: 2.5 + Self.sweepSeconds)
 
         var plane: Plane?
         var center: Vec3?
@@ -117,7 +124,46 @@ final class ARCaptureController: NSObject {
             }.value
             geometry = CaptureGeometry(photo: photo, plane: oriented, heightField: heightField)
         }
-        return CapturedMeal(image: image, geometry: geometry, deviceHasLiDAR: hasLiDAR, source: .camera)
+        return CapturedMeal(image: image, geometry: geometry, deviceHasLiDAR: hasLiDAR, source: .camera,
+                            extraViews: extraViews, depthFramesFused: depthFrames.count)
+    }
+
+    /// Short multi-frame sweep after the main photo: depth keeps fusing from every viewpoint (the delegate keeps
+    /// sampling), and the sharpest frames from the most different angles are kept as extra views for the analysis.
+    private func sweep(main: ARFrame) async -> [UIImage] {
+        // Convert each frame right away so no ARFrame (and its camera buffer) is held during the sweep.
+        var views: [(image: UIImage, position: Vec3, forward: Vec3)] = []
+        var lastTimestamp: TimeInterval = main.timestamp
+        let steps = Int(Self.sweepSeconds / Self.sweepInterval)
+        for step in 0..<steps {
+            sweepProgress = Double(step + 1) / Double(steps)
+            try? await Task.sleep(nanoseconds: UInt64(Self.sweepInterval * 1_000_000_000))
+            guard let frame = session.currentFrame, frame.timestamp != lastTimestamp else { continue }
+            lastTimestamp = frame.timestamp
+            let pose = Self.viewpoint(of: frame)
+            views.append((Self.uprightImage(from: frame.capturedImage, orientation: .right), pose.position, pose.forward))
+        }
+        sweepProgress = nil
+        let mainPose = Self.viewpoint(of: main)
+        let captured = views
+        let picked: [Int] = await Task.detached(priority: .userInitiated) { () -> [Int] in
+            var candidates: [SweepCandidate] = []
+            for (index, view) in captured.enumerated() {
+                guard let cg = view.image.cgImage, let gray = ImageTools.grayscale(cg) else { continue }
+                let sharpness = ImageQuality.laplacianVariance(gray: gray.pixels, width: gray.width, height: gray.height)
+                candidates.append(SweepCandidate(index: index + 1, sharpness: sharpness, position: view.position, forward: view.forward))
+            }
+            let main = SweepCandidate(index: 0, sharpness: .infinity, position: mainPose.position, forward: mainPose.forward)
+            return SweepSelector.select(candidates, main: main, count: 2)
+        }.value
+        return picked.compactMap { $0 >= 1 && $0 <= captured.count ? captured[$0 - 1].image : nil }
+    }
+
+    nonisolated static func viewpoint(of frame: ARFrame) -> (position: Vec3, forward: Vec3) {
+        let t = frame.camera.transform
+        let position = Vec3(Double(t.columns.3.x), Double(t.columns.3.y), Double(t.columns.3.z))
+        let forward = -Vec3(Double(t.columns.2.x), Double(t.columns.2.y), Double(t.columns.2.z))
+        return (position, forward)
     }
 
     private func highResolutionFrame() async -> ARFrame? {

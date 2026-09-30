@@ -99,7 +99,7 @@ final class AnalysisFlow {
         }
         if let scale {
             set(1, .done, scale.hasDepth
-                ? "LiDAR: \(scale.depthFramesFused) depth frames, camera \(Int(scale.cameraHeightCm)) cm above the table"
+                ? "LiDAR: \(scale.depthFramesFused) depth frames\(meal.extraViews.isEmpty ? "" : " and \(meal.extraViews.count) extra angles"), camera \(Int(scale.cameraHeightCm)) cm above the table"
                 : "Table found, camera \(Int(scale.cameraHeightCm)) cm above it (no LiDAR on this shot)")
         } else {
             set(1, .skipped, meal.source == .library ? "Library photo: no 3D data" : "No table found; using visual scale")
@@ -135,7 +135,8 @@ final class AnalysisFlow {
             insights: insights,
             measurement: measurer.map { MeasurementContext(measurer: $0, regions: regions) },
             zoomer: PhotoZoomer(fullImage: fullImage, modelSize: CGSize(width: modelImage.width, height: modelImage.height)),
-            effort: model.effort
+            effort: model.effort,
+            extraViewJPEGs: extraViewJPEGs(size: modelSize)
         )
         let client = ClaudeClient(connection: connection)
         do {
@@ -152,6 +153,13 @@ final class AnalysisFlow {
             fail(error.userMessage)
         } catch {
             fail(error.localizedDescription)
+        }
+    }
+
+    /// Extra sweep views, sized like the main photo for the model.
+    private func extraViewJPEGs(size: CGSize) -> [Data] {
+        meal.extraViews.compactMap { view in
+            ImageTools.cgImage(view).flatMap { ImageTools.resized($0, to: size) }.flatMap { ImageTools.jpeg($0, quality: 0.7) }
         }
     }
 

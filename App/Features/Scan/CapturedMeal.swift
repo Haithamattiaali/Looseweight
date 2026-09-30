@@ -24,5 +24,9 @@ struct CapturedMeal: Identifiable {
     var geometry: CaptureGeometry?
     var deviceHasLiDAR: Bool
     var source: Source
+    /// Sharp extra views of the same plate from other angles, picked from the capture sweep.
+    var extraViews: [UIImage] = []
+    /// Depth frames fused into the height field (whole sweep).
+    var depthFramesFused = 0
     var capturedAt = Date()
 }
