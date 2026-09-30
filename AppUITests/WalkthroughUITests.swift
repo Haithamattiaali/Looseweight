@@ -73,6 +73,11 @@ final class WalkthroughUITests: XCTestCase {
         _ = app.staticTexts["Identifying each food"].waitForExistence(timeout: 5)
         snap("08-analysing")
 
+        // After the photo: Log (what I ate) or Plan (what I'm about to eat).
+        let logChoice = app.buttons["logChoice"]
+        XCTAssertTrue(logChoice.waitForExistence(timeout: 10))
+        logChoice.tap()
+
         let save = app.buttons["saveMeal"]
         XCTAssertTrue(save.waitForExistence(timeout: 30))
         sleep(1)
@@ -98,5 +103,28 @@ final class WalkthroughUITests: XCTestCase {
         tapTab("Settings", in: app)
         sleep(2)
         snap("13-settings")
+
+        // Plan: the same demo plate before eating → bites, sips, pieces → the Inbox.
+        tapTab("Today", in: app)
+        let scanAgain = app.buttons["scanAccessory"]
+        XCTAssertTrue(scanAgain.waitForExistence(timeout: 10))
+        scanAgain.tap()
+        let shutterAgain = app.buttons["shutter"]
+        XCTAssertTrue(shutterAgain.waitForExistence(timeout: 15))
+        shutterAgain.tap()
+        let planChoice = app.buttons["planChoice"]
+        XCTAssertTrue(planChoice.waitForExistence(timeout: 10))
+        planChoice.tap()
+
+        let savePlan = app.buttons["savePlan"]
+        XCTAssertTrue(savePlan.waitForExistence(timeout: 30))
+        sleep(1)
+        snap("14-plan")
+
+        savePlan.tap()
+        tapTab("Inbox", in: app)
+        XCTAssertTrue(app.buttons["confirmAteAll"].waitForExistence(timeout: 15))
+        sleep(1)
+        snap("15-inbox")
     }
 }

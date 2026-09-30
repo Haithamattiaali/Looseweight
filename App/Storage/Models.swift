@@ -17,6 +17,16 @@ enum MealType: String, CaseIterable, Codable, Identifiable {
         }
     }
 
+    /// Share of what is left today that a plan for this meal may use (the rest stays for later meals).
+    var planShare: Double {
+        switch self {
+        case .breakfast: 0.35
+        case .lunch: 0.5
+        case .dinner: 1
+        case .snack: 0.25
+        }
+    }
+
     static func suggested(for date: Date = Date(), calendar: Calendar = .current) -> MealType {
         switch calendar.component(.hour, from: date) {
         case 4..<11: .breakfast
@@ -93,6 +103,11 @@ final class FoodLog {
 
     var nutrients: Nutrients { per100g.amount(forGrams: grams) }
     var method: PortionMethod { PortionMethod(rawValue: methodRaw) ?? .visualEstimate }
+
+    /// Bites, sips, pieces or a fraction — never grams.
+    var portionText: String {
+        PortionSizes.profile(name: name, grams: grams, counted: method == .count).describe(grams: grams)
+    }
 }
 
 @Model
@@ -131,6 +146,48 @@ final class PortionMemory {
     }
 }
 
+/// A plan made before eating ("Plan"). It waits in the Inbox and counts toward today only once confirmed.
+@Model
+final class PlannedMealRecord {
+    var id = UUID()
+    var createdAt = Date()
+    var title = ""
+    var mealTypeRaw = MealType.lunch.rawValue
+    @Attribute(.externalStorage) var photo: Data?
+    /// JSON of `PlannedMeal` (the plan and its confirmation) from LooseweightKit.
+    var payload = Data()
+    var isPending = true
+    var confirmedAt: Date?
+    var usedDepth = false
+
+    init(planned: PlannedMeal, mealType: MealType, photo: Data?, usedDepth: Bool) {
+        self.id = planned.id
+        self.createdAt = planned.createdAt
+        self.title = planned.plan.title
+        self.mealTypeRaw = mealType.rawValue
+        self.photo = photo
+        self.usedDepth = usedDepth
+        self.payload = (try? JSONEncoder().encode(planned)) ?? Data()
+        self.isPending = planned.confirmation.isPending
+        self.confirmedAt = planned.confirmedAt
+    }
+
+    var mealType: MealType {
+        get { MealType(rawValue: mealTypeRaw) ?? .snack }
+        set { mealTypeRaw = newValue.rawValue }
+    }
+
+    var planned: PlannedMeal? {
+        get { try? JSONDecoder().decode(PlannedMeal.self, from: payload) }
+        set {
+            guard let newValue else { return }
+            payload = (try? JSONEncoder().encode(newValue)) ?? payload
+            isPending = newValue.confirmation.isPending
+            confirmedAt = newValue.confirmedAt
+        }
+    }
+}
+
 enum LooseweightSchema {
-    static let models: [any PersistentModel.Type] = [MealLog.self, FoodLog.self, WeightLog.self, PortionMemory.self]
+    static let models: [any PersistentModel.Type] = [MealLog.self, FoodLog.self, WeightLog.self, PortionMemory.self, PlannedMealRecord.self]
 }

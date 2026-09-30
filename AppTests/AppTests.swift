@@ -38,6 +38,22 @@ final class AppTests: XCTestCase {
         XCTAssertEqual(chicken.timesLogged, 2)
     }
 
+    func testPlansCountOnlyOnceConfirmed() throws {
+        let container = try ModelContainer(for: Schema(LooseweightSchema.models), configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        let context = container.mainContext
+        let plan = MealPlanner.plan(DemoContent.estimate(), remaining: Nutrients(kcal: 300, protein: 40, carbs: 30, fat: 12))
+        XCTAssertLessThanOrEqual(plan.total.kcal, 300.5)
+        XCTAssertFalse(plan.portions.contains { $0.instruction.contains(" g") })
+        let record = Store.savePlan(plan, mealType: .lunch, photo: nil, in: context)
+        XCTAssertEqual(Store.pendingPlans(in: context).count, 1)
+        XCTAssertTrue(Store.meals(on: Date(), in: context).isEmpty, "a pending plan must not count")
+
+        Store.confirm(record, as: .atePart(0.5), in: context)
+        XCTAssertTrue(Store.pendingPlans(in: context).isEmpty)
+        let eaten = Store.meals(on: Date(), in: context).map(\.total.kcal).reduce(0, +)
+        XCTAssertEqual(eaten, plan.total.kcal / 2, accuracy: 10)
+    }
+
     func testWeightLogKeepsOneEntryPerDay() throws {
         let container = try ModelContainer(for: Schema(LooseweightSchema.models), configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
         let context = container.mainContext

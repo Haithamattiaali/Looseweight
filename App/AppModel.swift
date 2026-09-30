@@ -66,6 +66,11 @@ final class AppModel {
             defaults.set(newValue, forKey: Keys.cuisine)
         }
     }
+    /// When the app last came to the foreground (for the Inbox reminder).
+    var lastAppOpen: Date? {
+        get { defaults.object(forKey: Keys.lastAppOpen) as? Date }
+        set { defaults.set(newValue, forKey: Keys.lastAppOpen) }
+    }
     private var storedProfile: UserProfile?
     private var storedAIMode: AIMode
     private var storedEffort: AnalysisEffort
@@ -87,6 +92,7 @@ final class AppModel {
         static let proxyURL = "lw.proxyURL"
         static let modelOverride = "lw.modelOverride"
         static let cuisine = "lw.cuisine"
+        static let lastAppOpen = "lw.lastAppOpen"
         static let apiKey = "anthropic-api-key"
         static let proxyToken = "proxy-token"
     }

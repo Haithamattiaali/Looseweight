@@ -55,6 +55,43 @@ enum Store {
         }
     }
 
+    // MARK: Planned meals (Inbox)
+
+    /// What is left of today's targets from confirmed meals only (plans in the Inbox do not count).
+    static func remainingToday(targets: DailyTargets?, in context: ModelContext, now: Date = Date()) -> Nutrients {
+        let goal = Nutrients(kcal: targets?.kcal ?? 2_000, protein: targets?.proteinG ?? 120, carbs: targets?.carbsG ?? 200, fat: targets?.fatG ?? 65)
+        let eaten = meals(on: now, in: context).map(\.total).sum()
+        return MealPlanner.remaining(targets: goal, eaten: eaten)
+    }
+
+    static func pendingPlans(in context: ModelContext) -> [PlannedMealRecord] {
+        let descriptor = FetchDescriptor<PlannedMealRecord>(predicate: #Predicate { $0.isPending == true }, sortBy: [SortDescriptor(\.createdAt)])
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    @discardableResult
+    static func savePlan(_ plan: MealPlan, mealType: MealType, photo: Data?, usedDepth: Bool = false, in context: ModelContext) -> PlannedMealRecord {
+        let record = PlannedMealRecord(planned: PlannedMeal(plan: plan), mealType: mealType, photo: photo, usedDepth: usedDepth)
+        context.insert(record)
+        try? context.save()
+        return record
+    }
+
+    /// Records what happened. Only the eaten share becomes a logged meal (dated when it was planned).
+    @discardableResult
+    static func confirm(_ record: PlannedMealRecord, as confirmation: PlanConfirmation, now: Date = Date(), in context: ModelContext) -> MealLog? {
+        guard var planned = record.planned, planned.confirmation.isPending else { return nil }
+        planned.confirm(confirmation, at: now)
+        record.planned = planned
+        var logged: MealLog?
+        if let estimate = planned.confirmedEstimate {
+            logged = save(estimate, mealType: record.mealType, photo: record.photo, date: record.createdAt, source: "plan", in: context)
+            logged?.usedDepth = record.usedDepth
+        }
+        try? context.save()
+        return logged
+    }
+
     static func logWeight(_ kg: Double, on date: Date = Date(), in context: ModelContext, calendar: Calendar = .current) {
         let start = calendar.startOfDay(for: date)
         let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start
@@ -73,18 +110,19 @@ enum Store {
         try? context.delete(model: MealLog.self)
         try? context.delete(model: WeightLog.self)
         try? context.delete(model: PortionMemory.self)
+        try? context.delete(model: PlannedMealRecord.self)
         try? context.save()
     }
 
     static func csvExport(in context: ModelContext) -> String {
         let meals = (try? context.fetch(FetchDescriptor<MealLog>(sortBy: [SortDescriptor(\.date)]))) ?? []
         let formatter = ISO8601DateFormatter()
-        var lines = ["date,meal,food,grams,kcal,protein_g,carbs_g,fat_g,method"]
+        var lines = ["date,meal,food,portion,kcal,protein_g,carbs_g,fat_g,method"]
         for meal in meals {
             for item in meal.items {
                 let n = item.nutrients
                 let name = item.name.replacingOccurrences(of: "\"", with: "'")
-                lines.append("\(formatter.string(from: meal.date)),\(meal.mealType.rawValue),\"\(name)\",\(Int(item.grams)),\(Int(n.kcal)),\(n.protein.oneDecimal),\(n.carbs.oneDecimal),\(n.fat.oneDecimal),\(item.method.rawValue)")
+                lines.append("\(formatter.string(from: meal.date)),\(meal.mealType.rawValue),\"\(name)\",\"\(item.portionText)\",\(Int(n.kcal)),\(n.protein.oneDecimal),\(n.carbs.oneDecimal),\(n.fat.oneDecimal),\(item.method.rawValue)")
             }
         }
         lines.append("")

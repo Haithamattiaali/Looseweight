@@ -4,8 +4,11 @@ import RealityKit
 import SwiftData
 import SwiftUI
 
-/// Full-screen flow: camera → on-device + AI analysis → review → save.
+/// Full-screen flow: camera → on-device + AI analysis (while the person picks Log or Plan) → review or plan → save.
 struct ScanFlowView: View {
+    /// Called after a plan is saved to the Inbox, so the app can show it.
+    var onPlanned: () -> Void = {}
+
     @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var model
     @Environment(\.modelContext) private var context
@@ -14,9 +17,11 @@ struct ScanFlowView: View {
         case camera
         case analyzing(CapturedMeal, AnalysisFlow)
         case review(CapturedMeal, MealEstimate)
+        case plan(CapturedMeal, MealPlan, Nutrients)
     }
 
     @State private var stage: Stage = .camera
+    @State private var intent: MealIntent?
     @State private var mealType = MealType.suggested()
     @State private var note = ""
     @State private var errorMessage: String?
@@ -35,27 +40,32 @@ struct ScanFlowView: View {
                 )
                 .transition(.opacity)
             case let .analyzing(meal, flow):
-                AnalysisView(meal: meal, flow: flow, onRetry: { stage = .camera }, onClose: { dismiss() })
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                    .task(id: meal.id) {
-                        await flow.run()
-                        if case let .success(estimate)? = flow.outcome {
-                            withAnimation(Theme.settle) { stage = .review(meal, estimate) }
-                        }
-                    }
+                analyzing(meal, flow)
             case let .review(meal, estimate):
                 ReviewView(
                     image: meal.image,
                     estimate: estimate,
                     mealType: $mealType,
                     onSave: { edited in
-                        let photo = ImageTools.cgImage(meal.image)
-                            .flatMap { ImageTools.resized($0, to: ImageTools.sizeForModel(width: $0.width / 3, height: $0.height / 3)) }
-                            .flatMap { ImageTools.jpeg($0, quality: 0.7) }
-                        Store.save(edited, mealType: mealType, photo: photo, source: meal.source.rawValue, in: context)
+                        Store.save(edited, mealType: mealType, photo: thumbnail(meal), source: meal.source.rawValue, in: context)
                         dismiss()
                     },
-                    onRetake: { withAnimation(Theme.settle) { stage = .camera } }
+                    onRetake: retake
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            case let .plan(meal, plan, leftToday):
+                PlanView(
+                    image: meal.image,
+                    plan: plan,
+                    leftToday: leftToday,
+                    mealType: $mealType,
+                    onSave: {
+                        let record = Store.savePlan(plan, mealType: mealType, photo: thumbnail(meal), usedDepth: meal.geometry?.heightField != nil, in: context)
+                        PlanReminders.schedule(for: record, isUITest: model.isUITest)
+                        onPlanned()
+                        dismiss()
+                    },
+                    onRetake: retake
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -66,15 +76,66 @@ struct ScanFlowView: View {
         }
     }
 
+    private func analyzing(_ meal: CapturedMeal, _ flow: AnalysisFlow) -> some View {
+        AnalysisView(meal: meal, flow: flow, onRetry: retake, onClose: { dismiss() })
+            .overlay(alignment: .bottom) {
+                if !isFailure(flow) {
+                    IntentChooser(intent: intent, isReady: flow.outcome != nil) { choice in
+                        withAnimation(Theme.settle) { intent = choice }
+                        advance(meal, flow, choice: choice)
+                    }
+                    .padding(.horizontal, Theme.gutter)
+                    .padding(.bottom, Theme.m)
+                }
+            }
+            .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            .task(id: meal.id) {
+                await flow.run()
+                advance(meal, flow)
+            }
+    }
+
+    private func isFailure(_ flow: AnalysisFlow) -> Bool {
+        if case .failure? = flow.outcome { return true }
+        return false
+    }
+
+    /// Moves on once both the analysis and the person's choice are in.
+    private func advance(_ meal: CapturedMeal, _ flow: AnalysisFlow, choice: MealIntent? = nil) {
+        guard case .analyzing = stage, let chosen = choice ?? self.intent, case let .success(estimate)? = flow.outcome else { return }
+        switch chosen {
+        case .log:
+            withAnimation(Theme.settle) { stage = .review(meal, estimate) }
+        case .plan:
+            let leftToday = Store.remainingToday(targets: model.targets, in: context)
+            let budget = leftToday.scaled(by: mealType.planShare)
+            let plan = MealPlanner.plan(estimate, remaining: budget)
+            withAnimation(Theme.settle) { stage = .plan(meal, plan, leftToday) }
+        }
+    }
+
+    private func retake() {
+        intent = nil
+        withAnimation(Theme.settle) { stage = .camera }
+    }
+
+    private func thumbnail(_ meal: CapturedMeal) -> Data? {
+        ImageTools.cgImage(meal.image)
+            .flatMap { ImageTools.resized($0, to: ImageTools.sizeForModel(width: $0.width / 3, height: $0.height / 3)) }
+            .flatMap { ImageTools.jpeg($0, quality: 0.7) }
+    }
+
     private var stageKey: Int {
         switch stage {
         case .camera: 0
         case .analyzing: 1
         case .review: 2
+        case .plan: 3
         }
     }
 
     private func startAnalysis(_ meal: CapturedMeal) {
+        intent = nil
         let flow = AnalysisFlow(
             meal: meal,
             model: model,
@@ -83,6 +144,66 @@ struct ScanFlowView: View {
             userNote: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note
         )
         withAnimation(Theme.settle) { stage = .analyzing(meal, flow) }
+    }
+}
+
+/// What the photo is for: what I ate, or what I'm about to eat.
+enum MealIntent: Equatable {
+    case log, plan
+}
+
+/// Two glass choices that float over the analysis while it runs: Log (what I ate) or Plan (what I'm about to eat).
+private struct IntentChooser: View {
+    var intent: MealIntent?
+    var isReady: Bool
+    var onChoose: (MealIntent) -> Void
+
+    var body: some View {
+        VStack(spacing: Theme.xs) {
+            if let intent {
+                GlassPill {
+                    Label(intent == .log ? "Logging what you ate…" : "Planning your portions…", systemImage: intent == .log ? "checkmark.circle" : "fork.knife")
+                        .font(.footnote.weight(.semibold))
+                }
+                .transition(.opacity)
+            } else {
+                Text(isReady ? "Ready. What is this photo for?" : "While it reads the plate: what is this photo for?")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Theme.inkSecondary)
+                GlassEffectContainer(spacing: 20) {
+                    HStack(spacing: Theme.s) {
+                        choice(.log, title: "Log", subtitle: "What I ate", icon: "checkmark.circle", id: "logChoice")
+                        choice(.plan, title: "Plan", subtitle: "What I'm about to eat", icon: "fork.knife", id: "planChoice")
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+        }
+        .animation(Theme.settle, value: intent)
+        .sensoryFeedback(.selection, trigger: intent)
+    }
+
+    private func choice(_ value: MealIntent, title: String, subtitle: String, icon: String, id: String) -> some View {
+        Button {
+            onChoose(value)
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.title3.weight(.semibold))
+                Text(title)
+                    .font(.rounded(.headline, weight: .semibold))
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(Theme.inkSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Theme.s)
+        }
+        .buttonStyle(.glass)
+        .accessibilityLabel("\(title): \(subtitle)")
+        .accessibilityIdentifier(id)
     }
 }
 
@@ -111,6 +232,9 @@ private struct CameraScreen: View {
         ZStack {
             preview.ignoresSafeArea()
             CaptureFrame(ready: ready, showsHint: showingFrameHint)
+            if let progress = controller?.sweepProgress {
+                SweepRing(progress: progress)
+            }
             VStack(spacing: Theme.m) {
                 topBar
                 Spacer()
@@ -233,6 +357,9 @@ private struct CameraScreen: View {
     }
 
     private func pillMessage(_ guidance: ARCaptureController.Guidance?) -> String {
+        if let progress = controller?.sweepProgress {
+            return progress < 0.5 ? "Hold over the plate…" : "Tilt a little to see the sides…"
+        }
         if let guidance { return showingFrameHint && guidance.ready ? "Fit every plate and side inside the frame" : guidance.message }
         return "Tap the shutter to try the demo"
     }
@@ -319,6 +446,22 @@ private struct ShutterButton: View {
         .disabled(isCapturing)
         .accessibilityIdentifier("shutter")
         .accessibilityLabel("Measure the meal")
+    }
+}
+
+/// Live-Photo-like sweep: a thin ring fills while ~2 s of frames and depth are collected from more angles.
+private struct SweepRing: View {
+    var progress: Double
+
+    var body: some View {
+        Circle()
+            .trim(from: 0, to: progress)
+            .stroke(Theme.leaf, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+            .rotationEffect(.degrees(-90))
+            .frame(width: 96, height: 96)
+            .animation(.linear(duration: 0.2), value: progress)
+            .allowsHitTesting(false)
+            .accessibilityLabel("Capturing more angles")
     }
 }
 
