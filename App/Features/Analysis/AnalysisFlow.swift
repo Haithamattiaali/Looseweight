@@ -22,6 +22,8 @@ final class AnalysisFlow {
     enum Outcome {
         case success(MealEstimate)
         case failure(String)
+        /// The photo shows no food or drink; offer a retake, never an empty review.
+        case noFood
     }
 
     private(set) var steps: [Step] = [
@@ -149,6 +151,9 @@ final class AnalysisFlow {
             set(3, .done, "\(result.estimate.items.filter { $0.food != nil }.count) matched in the database")
             set(4, .done, "\(result.turns) steps with the AI")
             outcome = .success(result.estimate)
+        } catch ClaudeError.noFood {
+            for index in steps.indices where steps[index].state == .running { steps[index].state = .failed }
+            outcome = .noFood
         } catch let error as ClaudeError {
             fail(error.userMessage)
         } catch {

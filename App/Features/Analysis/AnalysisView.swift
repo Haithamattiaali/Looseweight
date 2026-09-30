@@ -18,6 +18,8 @@ struct AnalysisView: View {
                     ReadingPhoto(image: meal.image, isRunning: isRunning, sourceTitle: sourceTitle, sourceIcon: sourceIcon)
                     if case let .failure(message)? = flow.outcome {
                         AnalysisFailure(message: message, onRetry: onRetry, onClose: onClose)
+                    } else if case .noFood? = flow.outcome {
+                        NoFoodFound(onRetake: onRetry, onClose: onClose)
                     } else {
                         stepList
                     }
@@ -124,6 +126,35 @@ private struct AnalysisFailure: View {
             .controlSize(.large)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// The AI found no food or drink in the photo: nothing to review or save, only a retake.
+private struct NoFoodFound: View {
+    var onRetake: () -> Void
+    var onClose: () -> Void
+
+    var body: some View {
+        VStack(spacing: Theme.m) {
+            GlassPill(tint: Theme.honey) {
+                Label("No food found in this photo", systemImage: "fork.knife")
+                    .font(.subheadline.weight(.semibold))
+            }
+            Text("Point the camera at your meal and fit every plate inside the frame.")
+                .font(.body)
+                .foregroundStyle(Theme.inkSecondary)
+                .multilineTextAlignment(.center)
+            GlassEffectContainer(spacing: 20) {
+                HStack(spacing: Theme.s) {
+                    Button("Retake", action: onRetake).buttonStyle(.glassProminent).tint(Theme.leaf)
+                        .accessibilityIdentifier("noFoodRetake")
+                    Button("Close", action: onClose).buttonStyle(.glass)
+                }
+            }
+            .controlSize(.large)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityIdentifier("noFoodFound")
     }
 }
 
