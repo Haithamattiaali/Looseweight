@@ -7,124 +7,228 @@ struct TodayView: View {
 
     @Environment(AppModel.self) private var model
     @Environment(\.modelContext) private var context
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(sort: \MealLog.date, order: .reverse) private var allMeals: [MealLog]
     @State private var showingSearch = false
+    @State private var scrollOffset: CGFloat = 0
+    @State private var fillPulse = 0
+    @State private var warnedOver = false
 
     private var todaysMeals: [MealLog] {
         allMeals.filter { Calendar.current.isDateInToday($0.date) }
     }
 
     private var eaten: Nutrients { todaysMeals.map(\.total).sum() }
+    private var target: Double { model.targets?.kcal ?? 2_000 }
+
+    private var macros: PlateView.Macros {
+        let targets = model.targets
+        return PlateView.Macros(
+            protein: eaten.protein, carbs: eaten.carbs, fat: eaten.fat,
+            proteinTarget: targets?.proteinG ?? 120, carbsTarget: targets?.carbsG ?? 200, fatTarget: targets?.fatG ?? 65
+        )
+    }
+
+    /// 0 at rest → 1 once the plate has scrolled away and docks in the toolbar.
+    private var dock: CGFloat { min(max(scrollOffset / 260, 0), 1) }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
-                    summaryCard
+                VStack(spacing: Theme.xl) {
+                    plateSection
                     if let problem = model.connectionProblem {
-                        GlassCard(tint: Theme.sun, padding: 16) {
-                            Label(problem, systemImage: "sparkles")
-                                .font(.rounded(.footnote, weight: .medium))
+                        ConnectionPill(problem: problem)
+                    }
+                    if todaysMeals.isEmpty {
+                        EmptyDay(onScan: onScan)
+                    } else {
+                        MealTimeline(meals: todaysMeals) { meal in
+                            context.delete(meal)
+                            try? context.save()
                         }
                     }
-                    mealsSection
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 40)
+                .padding(.horizontal, Theme.gutter)
+                .padding(.bottom, Theme.xxl)
+            }
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top
+            } action: { _, offset in
+                scrollOffset = offset
             }
             .scrollEdgeEffectStyle(.soft, for: .top)
-            .background { AmbientBackground() }
+            .background { DaylightGround() }
             .navigationTitle("Today")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showingSearch = true
-                    } label: {
-                        Image(systemName: "magnifyingglass")
-                    }
-                    .accessibilityLabel("Add food by search")
-                }
-            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { toolbar }
             .sheet(isPresented: $showingSearch) {
                 FoodSearchView()
-                    .presentationDetents([.large])
+                    .presentationDetents([.medium, .large])
             }
+            .onChange(of: todaysMeals.count) { old, new in
+                if new > old { fillPulse += 1 }
+            }
+            .onChange(of: eaten.kcal > target) { _, over in
+                if over { warnedOver = true }
+            }
+            .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.7), trigger: fillPulse)
+            .sensoryFeedback(.warning, trigger: warnedOver) { old, new in !old && new }
         }
     }
 
-    private var summaryCard: some View {
-        let targets = model.targets
-        let target = targets?.kcal ?? 2_000
-        return GlassCard {
-            VStack(spacing: 22) {
-                HStack(alignment: .center, spacing: 24) {
-                    CalorieRing(eaten: eaten.kcal, target: target)
-                        .frame(width: 170, height: 170)
-                        .accessibilityIdentifier("calorieRing")
-                    VStack(alignment: .leading, spacing: 14) {
-                        stat("Eaten", value: eaten.kcal.kcalText, color: Theme.teal)
-                        stat("Target", value: target.kcalText, color: .secondary)
-                        if let maintenance = targets?.maintenanceKcal {
-                            stat("Burn", value: maintenance.kcalText, color: .secondary)
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            PlateView(eaten: eaten.kcal, target: target, macros: macros, style: .compact)
+                .frame(width: 30, height: 30)
+                .opacity(Double(dock))
+                .accessibilityHidden(dock < 0.5)
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                showingSearch = true
+            } label: {
+                Image(systemName: "magnifyingglass")
+            }
+            .accessibilityLabel("Add food by search")
+        }
+    }
+
+    private var plateSection: some View {
+        let scale = 1 - 0.78 * dock
+        return VStack(spacing: Theme.s) {
+            PlateView(
+                eaten: eaten.kcal,
+                target: target,
+                macros: macros,
+                style: todaysMeals.isEmpty ? .outline : .full
+            )
+            .overlay {
+                if todaysMeals.isEmpty {
+                    EmptyPlateNumber(target: target)
+                }
+            }
+            .frame(width: 300, height: 300)
+            .scaleEffect(reduceMotion ? 1 : scale, anchor: .top)
+            .opacity(reduceMotion ? 1 - Double(dock) : 1 - Double(dock) * 0.6)
+            .accessibilityIdentifier("calorieRing")
+            Text("\(Int(eaten.kcal.rounded())) eaten · \(Int(target.rounded())) target")
+                .font(.footnote)
+                .monospacedDigit()
+                .foregroundStyle(Theme.inkSecondary)
+                .contentTransition(.numericText(value: eaten.kcal))
+        }
+        .padding(.top, Theme.m)
+        .animation(Theme.fill, value: eaten.kcal)
+    }
+}
+
+/// Number shown inside an outline plate on an empty day.
+private struct EmptyPlateNumber: View {
+    var target: Double
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(Int(target.rounded()), format: .number)
+                .font(.system(size: 64, weight: .semibold, design: .rounded))
+                .tracking(-2)
+                .monospacedDigit()
+                .foregroundStyle(Theme.ink)
+            LabelText("kcal left")
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+private struct ConnectionPill: View {
+    var problem: String
+
+    var body: some View {
+        GlassPill(tint: Theme.ember) {
+            Label(problem, systemImage: "exclamationmark.circle")
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(Theme.ink)
+        }
+        .accessibilityHint("Open Settings to connect the AI")
+    }
+}
+
+private struct EmptyDay: View {
+    var onScan: () -> Void
+
+    var body: some View {
+        VStack(spacing: Theme.s) {
+            Text("Snap your first meal")
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(Theme.ink)
+            Text("Hold the phone flat above the plate. The iPhone measures the food in 3D, then the AI names it and counts the calories.")
+                .font(.body)
+                .foregroundStyle(Theme.inkSecondary)
+                .multilineTextAlignment(.center)
+            Button(action: onScan) {
+                Label("Scan a meal", systemImage: "camera.viewfinder")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glassProminent)
+            .tint(Theme.leaf)
+            .controlSize(.large)
+            .padding(.top, Theme.xs)
+            .accessibilityIdentifier("scanFirstMeal")
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+/// Meals grouped by type: a small label + time, then plain rows on the ground.
+private struct MealTimeline: View {
+    let meals: [MealLog]
+    var onDelete: (MealLog) -> Void
+
+    var body: some View {
+        LazyVStack(alignment: .leading, spacing: Theme.l) {
+            ForEach(MealType.allCases) { type in
+                let group = meals.filter { $0.mealType == type }.sorted { $0.date < $1.date }
+                if !group.isEmpty {
+                    MealGroup(type: type, meals: group, onDelete: onDelete)
+                }
+            }
+        }
+    }
+}
+
+private struct MealGroup: View {
+    let type: MealType
+    let meals: [MealLog]
+    var onDelete: (MealLog) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            HStack(spacing: Theme.xs) {
+                LabelText(type.title)
+                if let first = meals.first {
+                    Text(first.date, format: .dateTime.hour().minute())
+                        .font(.caption)
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.inkTertiary)
+                }
+            }
+            ForEach(meals) { meal in
+                MealRow(meal: meal)
+                    .scrollTransition { content, phase in
+                        content
+                            .opacity(phase.isIdentity ? 1 : 0.4)
+                            .scaleEffect(phase.isIdentity ? 1 : 0.97)
+                    }
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            onDelete(meal)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
                         }
                     }
-                }
-                VStack(spacing: 12) {
-                    MacroBar(title: "Protein", value: eaten.protein, target: targets?.proteinG ?? 120, color: Theme.protein)
-                    MacroBar(title: "Carbs", value: eaten.carbs, target: targets?.carbsG ?? 200, color: Theme.carbs)
-                    MacroBar(title: "Fat", value: eaten.fat, target: targets?.fatG ?? 65, color: Theme.fat)
-                }
-            }
-        }
-    }
-
-    private func stat(_ title: String, value: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.rounded(.caption, weight: .medium)).foregroundStyle(.secondary)
-            Text(value).font(.rounded(.title3, weight: .bold)).foregroundStyle(color).monospacedDigit()
-        }
-    }
-
-    @ViewBuilder
-    private var mealsSection: some View {
-        if todaysMeals.isEmpty {
-            GlassCard {
-                VStack(alignment: .leading, spacing: 14) {
-                    Image(systemName: "camera.macro")
-                        .font(.system(size: 34, weight: .semibold))
-                        .foregroundStyle(Theme.teal)
-                    Text("Snap your first meal")
-                        .font(.rounded(.title3, weight: .bold))
-                    Text("Hold the phone flat above the plate. The iPhone measures the food in 3D, then the AI names it and counts the calories.")
-                        .font(.rounded(.subheadline))
-                        .foregroundStyle(.secondary)
-                    Button(action: onScan) {
-                        Label("Scan a meal", systemImage: "camera.viewfinder")
-                            .font(.rounded(.body, weight: .semibold))
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.large)
-                    .accessibilityIdentifier("scanFirstMeal")
-                }
-            }
-        } else {
-            VStack(spacing: 12) {
-                SectionTitle(text: "Meals", systemImage: "fork.knife")
-                ForEach(MealType.allCases) { type in
-                    let meals = todaysMeals.filter { $0.mealType == type }.sorted { $0.date < $1.date }
-                    ForEach(meals) { meal in
-                        MealRow(meal: meal)
-                            .contextMenu {
-                                Button(role: .destructive) {
-                                    context.delete(meal)
-                                    try? context.save()
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
-                    }
-                }
+                Hairline()
             }
         }
     }
@@ -134,48 +238,53 @@ struct MealRow: View {
     let meal: MealLog
 
     var body: some View {
-        GlassCard(padding: 14) {
-            HStack(spacing: 14) {
-                thumbnail
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Image(systemName: meal.mealType.systemImage).foregroundStyle(Theme.teal)
-                        Text(meal.mealType.title).font(.rounded(.caption, weight: .semibold)).foregroundStyle(.secondary)
-                        if meal.usedDepth {
-                            Badge(text: "LiDAR", systemImage: "cube.transparent", color: Theme.teal)
-                        }
-                    }
-                    Text(meal.title).font(.rounded(.headline, weight: .semibold)).lineLimit(2)
-                    Text(meal.items.map(\.name).joined(separator: ", "))
-                        .font(.rounded(.caption))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 8)
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(Int(meal.total.kcal.rounded()))")
-                        .font(.rounded(.title3, weight: .bold))
-                        .monospacedDigit()
-                    Text("kcal").font(.rounded(.caption2)).foregroundStyle(.secondary)
-                }
+        HStack(spacing: Theme.s) {
+            thumbnail
+            VStack(alignment: .leading, spacing: 2) {
+                Text(meal.title)
+                    .font(.headline)
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(2)
+                Text(meal.items.map(\.name).joined(separator: ", "))
+                    .font(.footnote)
+                    .foregroundStyle(Theme.inkSecondary)
+                    .lineLimit(1)
             }
+            Spacer(minLength: Theme.xs)
+            Text(Int(meal.total.kcal.rounded()), format: .number)
+                .font(.numeric)
+                .monospacedDigit()
+                .foregroundStyle(Theme.ink)
         }
+        .padding(.vertical, Theme.xs)
+        .contentShape(.rect)
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
     private var thumbnail: some View {
-        if let data = meal.photo, let image = UIImage(data: data) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 58, height: 58)
-                .clipShape(.rect(cornerRadius: 16))
-        } else {
-            Image(systemName: meal.mealType.systemImage)
-                .font(.title2)
-                .foregroundStyle(Theme.teal)
-                .frame(width: 58, height: 58)
-                .glassEffect(.regular.tint(Theme.teal.opacity(0.15)), in: .rect(cornerRadius: 16))
+        ZStack(alignment: .bottomTrailing) {
+            if let data = meal.photo, let image = UIImage(data: data) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 52, height: 52)
+                    .clipShape(.rect(cornerRadius: Theme.thumbRadius, style: .continuous))
+            } else {
+                Image(systemName: meal.mealType.systemImage)
+                    .font(.title3)
+                    .foregroundStyle(Theme.inkSecondary)
+                    .frame(width: 52, height: 52)
+                    .background(Theme.hairline, in: .rect(cornerRadius: Theme.thumbRadius, style: .continuous))
+            }
+            if meal.usedDepth {
+                Image(systemName: "cube.transparent")
+                    .font(.system(size: 10, weight: .regular))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.4), radius: 2)
+                    .padding(4)
+                    .accessibilityLabel("Measured in 3D")
+            }
         }
     }
 }
