@@ -8,6 +8,8 @@ public enum ClaudeError: Error, Equatable, Sendable {
     case noModelAvailable
     case network(String)
     case cancelled
+    /// The photo shows no food or drink (or nothing that could be logged).
+    case noFood(reason: String?)
 
     /// Short plain-English text for the user.
     public var userMessage: String {
@@ -26,6 +28,7 @@ public enum ClaudeError: Error, Equatable, Sendable {
         case .noModelAvailable: "No suitable AI model is available for this key."
         case .network: "No connection to the AI service. Check the internet connection."
         case .cancelled: "Cancelled."
+        case .noFood: "No food found in this photo. Retake it with the meal inside the frame."
         }
     }
 }

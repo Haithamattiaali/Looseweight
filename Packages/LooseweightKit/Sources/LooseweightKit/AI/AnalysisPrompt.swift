@@ -17,6 +17,10 @@ public enum AnalysisPrompt {
     food), so split it into foods yourself.
 
     How to work
+    0. First check that the photo shows food or drink. When it shows none (a person, a pet, a room, a screen, \
+    an empty plate, a document), set no_food true, give no_food_reason in a few plain words (for example \
+    "a laptop on a desk"), return an empty items list and stop: call no tools. Otherwise set no_food false and \
+    no_food_reason null.
     1. List every food and drink you can see, including sauces, dressings, oils, toppings, bread and drinks. Split \
     mixed plates into components you can weigh (for example rice, chicken, cooking oil). Log a dish as one item \
     only when it cannot be split (soup, pizza, a sandwich).
@@ -172,8 +176,10 @@ public enum AnalysisPrompt {
                 "overall_confidence": .obj(["type": .string("number")]),
                 "clarifying_question": nullable("string"),
                 "warnings": .obj(["type": .string("array"), "items": .obj(["type": .string("string")])]),
+                "no_food": .obj(["type": .string("boolean")]),
+                "no_food_reason": nullable("string"),
             ]),
-            "required": .array(["meal_title", "items", "overall_confidence", "clarifying_question", "warnings"].map(JSONValue.string)),
+            "required": .array(["meal_title", "items", "overall_confidence", "clarifying_question", "warnings", "no_food", "no_food_reason"].map(JSONValue.string)),
             "additionalProperties": .bool(false),
         ])
     }()

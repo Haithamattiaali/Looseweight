@@ -81,6 +81,10 @@ public struct AIMealAnalysis: Codable, Hashable, Sendable {
     public var overallConfidence: Double
     public var clarifyingQuestion: String?
     public var warnings: [String]
+    /// True when the photo shows no food or drink at all.
+    public var noFood: Bool
+    /// Short plain-English reason when `noFood` is true (what the photo shows instead).
+    public var noFoodReason: String?
 
     enum CodingKeys: String, CodingKey {
         case mealTitle = "meal_title"
@@ -88,15 +92,34 @@ public struct AIMealAnalysis: Codable, Hashable, Sendable {
         case overallConfidence = "overall_confidence"
         case clarifyingQuestion = "clarifying_question"
         case warnings
+        case noFood = "no_food"
+        case noFoodReason = "no_food_reason"
     }
 
-    public init(mealTitle: String, items: [Item], overallConfidence: Double, clarifyingQuestion: String? = nil, warnings: [String] = []) {
+    public init(mealTitle: String, items: [Item], overallConfidence: Double, clarifyingQuestion: String? = nil, warnings: [String] = [],
+                noFood: Bool = false, noFoodReason: String? = nil) {
         self.mealTitle = mealTitle
         self.items = items
         self.overallConfidence = overallConfidence
         self.clarifyingQuestion = clarifyingQuestion
         self.warnings = warnings
+        self.noFood = noFood
+        self.noFoodReason = noFoodReason
     }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        mealTitle = try container.decodeIfPresent(String.self, forKey: .mealTitle) ?? ""
+        items = try container.decodeIfPresent([Item].self, forKey: .items) ?? []
+        overallConfidence = try container.decodeIfPresent(Double.self, forKey: .overallConfidence) ?? 0
+        clarifyingQuestion = try container.decodeIfPresent(String.self, forKey: .clarifyingQuestion)
+        warnings = try container.decodeIfPresent([String].self, forKey: .warnings) ?? []
+        noFood = try container.decodeIfPresent(Bool.self, forKey: .noFood) ?? false
+        noFoodReason = try container.decodeIfPresent(String.self, forKey: .noFoodReason)
+    }
+
+    /// True when the answer holds nothing to log: flagged as no food, or no items at all.
+    public var hasNoFood: Bool { noFood || items.isEmpty }
 
     /// Decodes the model's text, tolerating stray prose around the JSON object.
     public static func decode(from text: String) throws -> AIMealAnalysis {

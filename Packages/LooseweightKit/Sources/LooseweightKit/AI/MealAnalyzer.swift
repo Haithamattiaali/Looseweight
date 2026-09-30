@@ -161,6 +161,7 @@ public struct MealAnalyzer: Sendable {
             default:
                 progress(.checking)
                 let analysis = try AIMealAnalysis.decode(from: response.text)
+                if analysis.hasNoFood { throw ClaudeError.noFood(reason: analysis.noFoodReason) }
                 let estimate = NutritionResolver.resolve(
                     analysis,
                     database: database,
@@ -168,6 +169,8 @@ public struct MealAnalyzer: Sendable {
                     modelID: response.model.isEmpty ? model : response.model,
                     usedDepth: request.measurement?.measurer.heightField != nil
                 )
+                // Never hand back an empty meal (it would save as 0 kcal).
+                if estimate.items.isEmpty { throw ClaudeError.noFood(reason: analysis.noFoodReason) }
                 return AnalysisOutcome(estimate: estimate, analysis: analysis, usage: usage, turns: turn,
                                        modelID: response.model.isEmpty ? model : response.model, toolCalls: toolCalls)
             }
