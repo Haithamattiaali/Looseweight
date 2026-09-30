@@ -4,15 +4,28 @@ import SwiftUI
 /// "Plan": how much of each food in front of you to eat — in bites, sips, pieces or a share of the item.
 struct PlanView: View {
     let image: UIImage
-    let plan: MealPlan
+    /// The planner's suggestion; each slider marks it as a snap point.
+    let suggested: MealPlan
     /// What is left today before this meal (the plan may use only this meal's share of it).
     let leftToday: Nutrients
     @Binding var mealType: MealType
-    var onSave: () -> Void
+    var onSave: (MealPlan) -> Void
     var onRetake: () -> Void
 
+    @State private var plan: MealPlan
     @State private var appeared = false
     @State private var saved = false
+
+    init(image: UIImage, plan: MealPlan, leftToday: Nutrients, mealType: Binding<MealType>,
+         onSave: @escaping (MealPlan) -> Void, onRetake: @escaping () -> Void) {
+        self.image = image
+        suggested = plan
+        self.leftToday = leftToday
+        _mealType = mealType
+        self.onSave = onSave
+        self.onRetake = onRetake
+        _plan = State(initialValue: plan)
+    }
 
     var body: some View {
         NavigationStack {
@@ -25,7 +38,7 @@ struct PlanView: View {
                         .frame(maxHeight: 280)
                         .accessibilityHidden(true)
                     PlanHeader(plan: plan, leftToday: leftToday, mealType: mealType)
-                    PlanList(portions: plan.portions)
+                    PlanList(plan: $plan, suggested: suggested)
                     footnote
                 }
                 .padding(.horizontal, Theme.gutter)
@@ -68,7 +81,7 @@ struct PlanView: View {
         ToolbarItem(placement: .topBarTrailing) {
             Button {
                 withAnimation(Theme.snap) { saved = true }
-                onSave()
+                onSave(plan)
             } label: {
                 Label("Save plan", systemImage: "tray.and.arrow.down")
                     .labelStyle(.titleAndIcon)
@@ -98,6 +111,7 @@ private struct PlanHeader: View {
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)
                     .foregroundStyle(Theme.ink)
+                    .contentTransition(.numericText(value: plan.total.kcal))
                     .accessibilityIdentifier("planTotal")
                 LabelText("kcal")
             }
@@ -111,65 +125,67 @@ private struct PlanHeader: View {
                 .foregroundStyle(Theme.ink)
                 .multilineTextAlignment(.center)
                 .padding(.top, Theme.xxs)
+            BudgetFitBar(fit: BudgetFit(mealKcal: plan.total.kcal, leftBefore: leftToday.kcal))
+                .padding(.top, Theme.xs)
             MealMacrosRow(total: plan.total)
                 .padding(.top, Theme.xs)
         }
         .frame(maxWidth: .infinity)
+        .animation(Theme.snap, value: plan.total.kcal)
     }
 }
 
-/// One plain row per food: name on the left, the instruction ("6 bites", "Skip") large on the right.
+/// One row per food, each with a slider in its own unit ("3 pieces", "5 sips") and "= X kcal".
 struct PlanList: View {
-    let portions: [PlannedPortion]
+    @Binding var plan: MealPlan
+    let suggested: MealPlan
 
     var body: some View {
         VStack(spacing: 0) {
             Hairline()
-            ForEach(portions) { portion in
-                PlanRow(portion: portion)
+            ForEach($plan.portions) { $portion in
+                PlanRow(portion: $portion, suggestedGrams: suggestedGrams(portion.id))
                 Hairline()
             }
         }
         .accessibilityIdentifier("planList")
     }
+
+    private func suggestedGrams(_ id: UUID) -> Double? {
+        suggested.portions.first { $0.id == id }?.plannedGrams
+    }
 }
 
 struct PlanRow: View {
-    let portion: PlannedPortion
+    @Binding var portion: PlannedPortion
+    var suggestedGrams: Double?
     @Environment(\.unitsMode) private var unitsMode
 
     private var instruction: String { AmountFormatter(mode: unitsMode).instruction(portion) }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            header
+            UnitSlider(name: portion.name, scale: portion.unitScale, grams: $portion.plannedGrams, suggestedGrams: suggestedGrams)
+        }
+        .padding(.vertical, Theme.s)
+    }
+
+    private var header: some View {
         HStack(alignment: .center, spacing: Theme.s) {
             Circle()
                 .fill(portion.isSkipped ? Theme.hairline : Theme.leaf)
                 .frame(width: 8, height: 8)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(portion.name)
-                    .font(.headline)
-                    .foregroundStyle(portion.isSkipped ? Theme.inkTertiary : Theme.ink)
-                if !portion.isSkipped {
-                    Text("\(Int(portion.nutrients.kcal.rounded())) kcal")
-                        .font(.caption)
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.inkTertiary)
-                }
-            }
+            Text(portion.name)
+                .font(.headline)
+                .foregroundStyle(portion.isSkipped ? Theme.inkTertiary : Theme.ink)
             Spacer(minLength: Theme.xs)
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(instruction)
-                    .font(.numeric)
-                    .foregroundStyle(portion.isSkipped ? Theme.inkTertiary : Theme.ink)
-                    .multilineTextAlignment(.trailing)
-                if let available = portion.availableText, !portion.isSkipped, !portion.isAll {
-                    Text(available)
-                        .font(.caption)
-                        .foregroundStyle(Theme.inkSecondary)
-                }
+            if let available = portion.availableText, !portion.isSkipped, !portion.isAll {
+                Text(available)
+                    .font(.caption)
+                    .foregroundStyle(Theme.inkSecondary)
             }
         }
-        .padding(.vertical, Theme.s)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(portion.name): \(instruction)")
     }

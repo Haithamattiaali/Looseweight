@@ -50,6 +50,12 @@ Settings row: **Units: Everyday (bites, sips, pieces) / Precise (grams)** with a
 - Portion sizes (`PortionSizes`): drinks → sips of ~20 mL; small countable foods (cherry tomatoes, nuggets, dates,
   falafel…) → pieces; one big item (a chicken breast, a fillet, a sandwich, a banana) → fraction of the piece;
   sauces/oil → fraction of the sauce; everything else → bites (rice/pasta/meat ~15 g, vegetables ~12 g, nuts ~8 g).
+- **Unit sliders (Plan and Review).** Every item has a slider in its natural unit (`UnitScale`): bites, sips, pieces
+  or slices, servings (½ steps) or fractions of one item (¼ ⅓ ½ ⅔ ¾ all). Each stop shows the unit words and
+  "= X kcal"; the meal total and "N kcal left today after this" / "N kcal over today" (`BudgetFit`) update live with
+  a haptic tick per step. The AI's suggestion is a marker and snap point ("suggested: 4 bites"). Plans stop at what
+  is there; Review runs past it (the person may have eaten more). Everyday labels never show grams; Precise adds them.
+  Accessibility id `unitSlider` (adjustable), `budgetFit`.
 - **Drinks are first-class.** The analysis answer gives every item `kind: food|drink`; drinks also get
   `drink_unit` (sip / cup / glass / can / bottle / mug) and `ml_per_unit`. The prompt asks for every drink in view
   (water, juice, soda, coffee, tea, milk, smoothies, shakes, soups served to drink). `NutritionResolver` also catches

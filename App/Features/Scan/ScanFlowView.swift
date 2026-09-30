@@ -45,6 +45,7 @@ struct ScanFlowView: View {
                 ReviewView(
                     image: meal.image,
                     estimate: estimate,
+                    leftToday: Store.remainingToday(targets: model.targets, in: context),
                     mealType: $mealType,
                     onSave: { edited in
                         Store.save(edited, mealType: mealType, photo: thumbnail(meal), source: meal.source.rawValue, in: context)
@@ -59,8 +60,8 @@ struct ScanFlowView: View {
                     plan: plan,
                     leftToday: leftToday,
                     mealType: $mealType,
-                    onSave: {
-                        let record = Store.savePlan(plan, mealType: mealType, photo: thumbnail(meal), usedDepth: meal.geometry?.heightField != nil, in: context)
+                    onSave: { edited in
+                        let record = Store.savePlan(edited, mealType: mealType, photo: thumbnail(meal), usedDepth: meal.geometry?.heightField != nil, in: context)
                         PlanReminders.schedule(for: record, isUITest: model.isUITest)
                         onPlanned()
                         dismiss()

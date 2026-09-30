@@ -91,6 +91,8 @@ final class WalkthroughUITests: XCTestCase {
             firstItem.tap()
             sleep(1)
             snap("10-review-adjust")
+            let reviewSlider = app.descendants(matching: .any).matching(identifier: "unitSlider").firstMatch
+            XCTAssertTrue(reviewSlider.waitForExistence(timeout: 5))
         }
 
         save.tap()
@@ -123,6 +125,14 @@ final class WalkthroughUITests: XCTestCase {
         XCTAssertTrue(savePlan.waitForExistence(timeout: 30))
         sleep(1)
         snap("14-plan")
+
+        // Every food has a unit slider; sliding updates "= X kcal" and how the meal fits today.
+        let slider = app.descendants(matching: .any).matching(identifier: "unitSlider").firstMatch
+        XCTAssertTrue(slider.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["budgetFit"].exists)
+        slider.swipeRight()
+        sleep(1)
+        snap("14b-plan-slider")
 
         savePlan.tap()
         tapTab("Inbox", in: app)

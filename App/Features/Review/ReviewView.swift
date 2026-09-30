@@ -5,20 +5,27 @@ import SwiftUI
 struct ReviewView: View {
     let image: UIImage
     @State var estimate: MealEstimate
+    /// What is left today before this meal, for the live "fits today" line.
+    var leftToday: Nutrients?
     @Binding var mealType: MealType
     var onSave: (MealEstimate) -> Void
     var onRetake: () -> Void
 
     /// Each food's everyday unit, fixed from what the analysis saw (so "the piece" stays the same piece while editing).
     @State private var profiles: [UUID: PortionProfile]
+    /// What the analysis saw, per item: the slider's suggestion marker.
+    @State private var suggestions: [UUID: Double]
     @State private var selected: UUID?
     @State private var showingSearch = false
     @State private var appeared = false
     @State private var saved = false
 
-    init(image: UIImage, estimate: MealEstimate, mealType: Binding<MealType>, onSave: @escaping (MealEstimate) -> Void, onRetake: @escaping () -> Void) {
+    init(image: UIImage, estimate: MealEstimate, leftToday: Nutrients? = nil, mealType: Binding<MealType>,
+         onSave: @escaping (MealEstimate) -> Void, onRetake: @escaping () -> Void) {
         self.image = image
+        self.leftToday = leftToday
         _estimate = State(initialValue: estimate)
+        _suggestions = State(initialValue: Dictionary(estimate.items.map { ($0.id, $0.grams) }, uniquingKeysWith: { first, _ in first }))
         _profiles = State(initialValue: Dictionary(estimate.items.map { ($0.id, $0.portionProfile) }, uniquingKeysWith: { first, _ in first }))
         _mealType = mealType
         self.onSave = onSave
@@ -31,6 +38,9 @@ struct ReviewView: View {
                 VStack(spacing: Theme.l) {
                     SlicedPhoto(image: image, items: estimate.items, selected: selected)
                     ReviewTotal(estimate: estimate)
+                    if let leftToday {
+                        BudgetFitBar(fit: BudgetFit(mealKcal: estimate.total.kcal, leftBefore: leftToday.kcal))
+                    }
                     if let question = estimate.clarifyingQuestion {
                         Label(question, systemImage: "questionmark.bubble")
                             .font(.footnote.weight(.medium))
@@ -54,6 +64,7 @@ struct ReviewView: View {
                         food: FoodMatch(id: record.id, name: record.name, source: record.source), method: .userNote, confidence: 1
                     )
                     profiles[item.id] = item.portionProfile
+                    suggestions[item.id] = item.grams
                     estimate.items.append(item)
                 }
                 .presentationDetents([.medium, .large])
@@ -101,7 +112,8 @@ struct ReviewView: View {
         VStack(spacing: 0) {
             Hairline()
             ForEach($estimate.items) { $item in
-                ItemRow(item: $item, profile: profiles[item.id] ?? item.portionProfile, isSelected: selected == item.id) {
+                ItemRow(item: $item, profile: profiles[item.id] ?? item.portionProfile, seenGrams: suggestions[item.id] ?? item.grams,
+                        isSelected: selected == item.id) {
                     withAnimation(Theme.settle) { selected = selected == item.id ? nil : item.id }
                 }
                 Hairline()
@@ -231,6 +243,7 @@ private struct SlicedPhoto: View {
 private struct ItemRow: View {
     @Binding var item: EstimatedItem
     var profile: PortionProfile
+    var seenGrams: Double
     var isSelected: Bool
     var onTap: () -> Void
     @Environment(\.unitsMode) private var unitsMode
@@ -241,7 +254,7 @@ private struct ItemRow: View {
                 .contentShape(.rect)
                 .onTapGesture(perform: onTap)
             if isSelected {
-                PortionEditor(item: $item, profile: profile)
+                PortionEditor(item: $item, profile: profile, seenGrams: seenGrams)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
@@ -289,26 +302,20 @@ private struct ItemRow: View {
 private struct PortionEditor: View {
     @Binding var item: EstimatedItem
     var profile: PortionProfile
+    var seenGrams: Double
     @Environment(\.unitsMode) private var unitsMode
 
     private var amounts: AmountFormatter { AmountFormatter(mode: unitsMode) }
 
-    private var sliderRange: ClosedRange<Double> {
-        let low = max(0, min(item.gramsLow, item.grams) * 0.5)
-        let high = max(item.gramsHigh, item.grams) * 1.6 + profile.stepGrams
-        return low...high
+    private var scale: UnitScale {
+        UnitScale(profile: profile, per100g: item.per100g, availableGrams: max(seenGrams, item.gramsHigh), allowMore: true)
     }
 
     private var stepTitle: String { profile.stepTitle }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.s) {
-            Slider(value: $item.grams, in: sliderRange, step: max(profile.stepGrams / 4, 1))
-                .tint(Theme.leaf)
-                .background(alignment: .leading) { rangeBand }
-                .sensoryFeedback(.selection, trigger: Int(profile.count(forGrams: item.grams) * (profile.unit == .whole ? 4 : 1)))
-                .accessibilityLabel("Portion of \(item.name)")
-                .accessibilityValue(amounts.amount(grams: item.grams, profile: profile))
+            UnitSlider(name: item.name, scale: scale, grams: $item.grams, suggestedGrams: seenGrams)
             HStack {
                 Text(amounts.range(low: item.gramsLow, high: item.gramsHigh, profile: profile))
                     .font(.caption)
@@ -358,19 +365,5 @@ private struct PortionEditor: View {
             }
             .font(.caption.weight(.semibold))
         }
-    }
-
-    private var rangeBand: some View {
-        GeometryReader { proxy in
-            let span = max(sliderRange.upperBound - sliderRange.lowerBound, 1)
-            let start = (item.gramsLow - sliderRange.lowerBound) / span
-            let end = (item.gramsHigh - sliderRange.lowerBound) / span
-            Capsule()
-                .fill(Theme.leaf.opacity(0.18))
-                .frame(width: max(8, proxy.size.width * CGFloat(max(end - start, 0))), height: 10)
-                .offset(x: proxy.size.width * CGFloat(max(start, 0)))
-                .frame(maxHeight: .infinity, alignment: .center)
-        }
-        .allowsHitTesting(false)
     }
 }
