@@ -22,12 +22,17 @@ struct OnboardingView: View {
 
     private var problems: [EnergyModel.ProfileProblem] { EnergyModel.validate(draft) }
 
+    /// Welcome, how you count food, about you, goal, plan.
+    private let lastPage = 4
+    /// The plate drawing has four stages; the counting step keeps the welcome stage.
+    private var plateStep: Int { max(page - 1, 0) }
+
     var body: some View {
         ZStack {
             DaylightGround()
             VStack(spacing: Theme.l) {
-                OnboardingPlate(step: page, pace: pace)
-                    .frame(width: page == 3 ? 140 : 120, height: page == 3 ? 140 : 120)
+                OnboardingPlate(step: plateStep, pace: pace)
+                    .frame(width: page == lastPage ? 140 : 120, height: page == lastPage ? 140 : 120)
                     .padding(.top, Theme.l)
                     .animation(Theme.settle, value: page)
                 ScrollView {
@@ -49,9 +54,11 @@ struct OnboardingView: View {
         case 0:
             WelcomeStep().transition(stepTransition)
         case 1:
+            CountingStep().transition(stepTransition)
+        case 2:
             AboutYouStep(sex: $sex, birthYear: $birthYear, heightCm: $heightCm, weightKg: $weightKg)
                 .transition(stepTransition)
-        case 2:
+        case 3:
             GoalStep(goalKg: $goalKg, pace: $pace, activity: $activity, problems: problems)
                 .transition(stepTransition)
         default:
@@ -66,7 +73,7 @@ struct OnboardingView: View {
 
     private var footer: some View {
         VStack(spacing: Theme.m) {
-            PageDots(count: 4, current: page)
+            PageDots(count: lastPage + 1, current: page)
             HStack(spacing: Theme.s) {
                 if page > 0 {
                     Button("Back") { withAnimation(Theme.settle) { page -= 1 } }
@@ -78,21 +85,21 @@ struct OnboardingView: View {
                         .controlSize(.large)
                 }
                 Button {
-                    if page < 3 {
+                    if page < lastPage {
                         withAnimation(Theme.settle) { page += 1 }
                     } else {
                         model.profile = draft
                         if isEditing { dismiss() }
                     }
                 } label: {
-                    Text(page < 3 ? "Continue" : (isEditing ? "Save" : "Start"))
+                    Text(page < lastPage ? "Continue" : (isEditing ? "Save" : "Start"))
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glassProminent)
                 .tint(Theme.leaf)
                 .controlSize(.large)
-                .disabled(page == 2 && !problems.isEmpty)
+                .disabled(page == 3 && !problems.isEmpty)
                 .accessibilityIdentifier("onboardingContinue")
             }
         }
@@ -177,6 +184,39 @@ private struct PageDots: View {
 
 // MARK: - Steps
 
+/// How amounts read in the app: bites, sips, pieces, a share of the item, servings. No scale.
+private struct CountingStep: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.l) {
+            Text("Count food the way you eat it")
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(Theme.ink)
+            VStack(alignment: .leading, spacing: Theme.m) {
+                row("fork.knife", "Bites", "Rice, pasta, salad: \"about 7 bites\".")
+                row("cup.and.saucer", "Sips", "Juice, milk, coffee: \"5 sips\".")
+                row("circle.grid.2x2", "Pieces", "Nuggets, dates, cherry tomatoes: \"6 pieces\".")
+                row("chart.pie", "A share of it", "One chicken breast or sandwich: \"2/3 of the piece\".")
+                row("square.stack", "Servings", "Packaged or searched food: \"1½ servings\".")
+            }
+            Text("Protein, carbs and fat show as progress towards your day, not numbers to add up.")
+                .font(.footnote)
+                .foregroundStyle(Theme.inkSecondary)
+        }
+        .accessibilityIdentifier("countingStep")
+    }
+
+    private func row(_ icon: String, _ title: String, _ example: String) -> some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.headline).foregroundStyle(Theme.ink)
+                Text(example).font(.subheadline).foregroundStyle(Theme.inkSecondary)
+            }
+        } icon: {
+            Image(systemName: icon).foregroundStyle(Theme.leaf)
+        }
+    }
+}
+
 private struct WelcomeStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.l) {
@@ -186,7 +226,7 @@ private struct WelcomeStep: View {
                 .foregroundStyle(Theme.ink)
             VStack(alignment: .leading, spacing: Theme.m) {
                 point("cube.transparent", "Your iPhone measures the food in 3D with its camera and LiDAR.")
-                point("sparkles", "Claude AI names each food and weighs it from those measurements.")
+                point("sparkles", "Claude AI names each food and works out how much is there.")
                 point("checkmark.seal", "Calories come from the USDA food database, not from guesses.")
                 point("chart.line.downtrend.xyaxis", "Your daily target learns how much you really burn.")
             }
@@ -352,6 +392,7 @@ private struct GoalStep: View {
 
 private struct PlanStep: View {
     var draft: UserProfile
+    @Environment(\.unitsMode) private var unitsMode
 
     @State private var shown = 0.0
 
@@ -377,9 +418,9 @@ private struct PlanStep: View {
                 LabelText("kcal a day")
             }
             HStack(spacing: Theme.l) {
-                macro("Protein", targets.proteinG, Theme.protein)
-                macro("Carbs", targets.carbsG, Theme.carbs)
-                macro("Fat", targets.fatG, Theme.fat)
+                macro("Protein", targets.proteinG, 4, targets.kcal, Theme.protein)
+                macro("Carbs", targets.carbsG, 4, targets.kcal, Theme.carbs)
+                macro("Fat", targets.fatG, 9, targets.kcal, Theme.fat)
             }
             Text("You burn about \(Int(targets.maintenanceKcal)) kcal a day." + (days.map { " At this pace you reach \(draft.goalWeightKg.oneDecimal) kg in about \(max($0 / 7, 1)) weeks." } ?? ""))
                 .font(.body)
@@ -398,10 +439,10 @@ private struct PlanStep: View {
         }
     }
 
-    private func macro(_ title: String, _ grams: Double, _ color: Color) -> some View {
+    private func macro(_ title: String, _ grams: Double, _ kcalPerGram: Double, _ dailyKcal: Double, _ color: Color) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             LabelText(title, color: color)
-            Text("\(Int(grams)) g")
+            Text(AmountFormatter(mode: unitsMode).macroTarget(grams: grams, kcalPerGram: kcalPerGram, dailyKcal: dailyKcal))
                 .font(.numeric)
                 .foregroundStyle(Theme.ink)
         }
