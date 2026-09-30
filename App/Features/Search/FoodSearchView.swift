@@ -2,7 +2,7 @@ import LooseweightKit
 import SwiftData
 import SwiftUI
 
-/// Manual add: search the food table, set grams (a kitchen scale is the most accurate tool there is).
+/// Manual add: search the food table, pick how many servings (no scale, no grams — servings, pieces, bites).
 struct FoodSearchView: View {
     var onPick: ((FoodRecord, Double) -> Void)?
 
@@ -11,7 +11,7 @@ struct FoodSearchView: View {
     @State private var query = ""
     @State private var results: [FoodRecord] = []
     @State private var chosen: FoodRecord?
-    @State private var grams = 100.0
+    @State private var servings = 1.0
     @State private var mealType = MealType.suggested()
     @State private var recent: [PortionHint] = []
 
@@ -55,7 +55,7 @@ struct FoodSearchView: View {
                     Button("Add", action: add)
                         .buttonStyle(.glassProminent)
                         .tint(Theme.leaf)
-                        .disabled(chosen == nil || grams <= 0)
+                        .disabled(chosen == nil || servings <= 0)
                 }
             }
         }
@@ -67,7 +67,10 @@ struct FoodSearchView: View {
             Button {
                 withAnimation(Theme.settle) {
                     chosen = isChosen ? nil : record
-                    if !isChosen, let hint = recent.first(where: { $0.food == record.name }) { grams = hint.typicalGrams.rounded() }
+                    servings = 1
+                    if !isChosen, let hint = recent.first(where: { $0.food == record.name }) {
+                        servings = max(0.5, (hint.typicalGrams / Self.servingGrams(record) * 2).rounded() / 2)
+                    }
                 }
             } label: {
                 HStack {
@@ -76,7 +79,7 @@ struct FoodSearchView: View {
                         Text(record.category).font(.caption).foregroundStyle(Theme.inkTertiary)
                     }
                     Spacer()
-                    Text("\(Int(record.per100g.kcal)) kcal/100 g")
+                    Text("\(Int(record.per100g.amount(forGrams: Self.servingGrams(record)).kcal.rounded())) kcal a serving")
                         .font(.caption.weight(.semibold))
                         .monospacedDigit()
                         .foregroundStyle(Theme.inkSecondary)
@@ -95,17 +98,32 @@ struct FoodSearchView: View {
         }
     }
 
+    static func servingGrams(_ record: FoodRecord) -> Double {
+        PortionSizes.servingGrams(name: record.name, category: record.category)
+    }
+
+    private func grams(for record: FoodRecord) -> Double {
+        servings * Self.servingGrams(record)
+    }
+
     private func amountEditor(_ record: FoodRecord) -> some View {
-        VStack(alignment: .leading, spacing: Theme.s) {
+        let profile = PortionSizes.profile(name: record.name, category: record.category, grams: Self.servingGrams(record))
+        return VStack(alignment: .leading, spacing: Theme.s) {
             HStack(alignment: .firstTextBaseline) {
-                TextField("Grams", value: $grams, format: .number)
-                    .keyboardType(.decimalPad)
-                    .font(.system(.title2, design: .rounded, weight: .semibold))
-                    .frame(maxWidth: 120)
-                Text("g").foregroundStyle(Theme.inkSecondary)
-                Stepper("Grams", value: $grams, in: 0...5_000, step: 10).labelsHidden()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(Self.servingsText(servings))
+                        .font(.system(.title2, design: .rounded, weight: .semibold))
+                        .monospacedDigit()
+                        .contentTransition(.numericText(value: servings))
+                    if profile.unit != .whole {
+                        Text(profile.describe(grams: grams(for: record)))
+                            .font(.caption)
+                            .foregroundStyle(Theme.inkSecondary)
+                    }
+                }
+                Stepper("Servings", value: $servings, in: 0.5...20, step: 0.5).labelsHidden()
                 Spacer()
-                Text(record.per100g.amount(forGrams: grams).kcal.kcalText)
+                Text(record.per100g.amount(forGrams: grams(for: record)).kcal.kcalText)
                     .font(.numeric)
                     .monospacedDigit()
                     .foregroundStyle(Theme.ink)
@@ -119,13 +137,22 @@ struct FoodSearchView: View {
         }
     }
 
+    static func servingsText(_ servings: Double) -> String {
+        let whole = servings.rounded(.down)
+        let half = servings - whole >= 0.5
+        let number: String
+        if whole == 0 { number = "½" } else { number = half ? "\(Int(whole))½" : "\(Int(whole))" }
+        return "\(number) serving\(servings > 1 ? "s" : "")"
+    }
+
     private func add() {
-        guard let chosen, grams > 0 else { return }
+        guard let chosen, servings > 0 else { return }
+        let amount = grams(for: chosen)
         if let onPick {
-            onPick(chosen, grams)
+            onPick(chosen, amount)
         } else {
             let item = EstimatedItem(
-                name: chosen.name, grams: grams, gramsLow: grams, gramsHigh: grams, per100g: chosen.per100g,
+                name: chosen.name, grams: amount, gramsLow: amount, gramsHigh: amount, per100g: chosen.per100g,
                 food: FoodMatch(id: chosen.id, name: chosen.name, source: chosen.source), method: .userNote, confidence: 1
             )
             let estimate = MealEstimate(title: chosen.name, items: [item], overallConfidence: 1, clarifyingQuestion: nil, warnings: [], modelID: nil, usedDepth: false)

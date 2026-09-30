@@ -47,7 +47,7 @@ enum DemoContent {
         DemoItem(name: "Cherry tomatoes", query: "tomatoes cherry raw", grams: 59, low: 52, high: 66, method: .count,
                  volume: nil, density: nil, confidence: 0.9,
                  polygon: [[220, 240], [300, 215], [310, 300], [300, 370], [270, 390], [240, 385], [215, 290]],
-                 notes: "6 tomatoes of about 10 g."),
+                 notes: "6 small tomatoes."),
         DemoItem(name: "Steamed broccoli", query: "broccoli cooked boiled", grams: 58, low: 45, high: 72, method: .depthVolume,
                  volume: 105, density: 0.55, confidence: 0.72,
                  polygon: [[295, 290], [365, 250], [430, 230], [500, 260], [495, 340], [430, 370], [385, 380], [350, 405], [300, 395], [290, 330]]),

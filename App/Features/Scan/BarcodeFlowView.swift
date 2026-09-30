@@ -4,7 +4,7 @@ import SwiftUI
 import Vision
 import VisionKit
 
-/// Packaged food: scan the barcode on the device, fetch exact per-100 g values, weigh or pick a portion.
+/// Packaged food: scan the barcode on the device, fetch exact per-100 g values, pick how many servings.
 struct BarcodeFlowView: View {
     let mealType: MealType
     var onSaved: () -> Void
@@ -14,7 +14,7 @@ struct BarcodeFlowView: View {
     @State private var code: String?
     @State private var product: FoodRecord?
     @State private var lookupFailed = false
-    @State private var grams = 100.0
+    @State private var servings = 1.0
 
     private var scannerAvailable: Bool {
         DataScannerViewController.isSupported && DataScannerViewController.isAvailable
@@ -63,19 +63,20 @@ struct BarcodeFlowView: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 14) {
                 Text(product.name).font(.rounded(.title3, weight: .bold))
-                Text("Per 100 g: \(Int(product.per100g.kcal)) kcal · P \(product.per100g.protein.oneDecimal) g · C \(product.per100g.carbs.oneDecimal) g · F \(product.per100g.fat.oneDecimal) g")
+                let serving = product.per100g.amount(forGrams: servingGrams(product))
+                Text("Per serving: \(Int(serving.kcal.rounded())) kcal · Protein \(serving.protein.oneDecimal) · Carbs \(serving.carbs.oneDecimal) · Fat \(serving.fat.oneDecimal)")
                     .font(.rounded(.caption)).foregroundStyle(.secondary)
                 HStack {
-                    TextField("Grams", value: $grams, format: .number)
-                        .keyboardType(.decimalPad)
+                    Text(FoodSearchView.servingsText(servings))
                         .font(.rounded(.title2, weight: .bold))
-                        .frame(maxWidth: 120)
-                    Text("g eaten").foregroundStyle(.secondary)
+                        .monospacedDigit()
+                    Stepper("Servings eaten", value: $servings, in: 0.5...20, step: 0.5).labelsHidden()
                     Spacer()
-                    Text(product.per100g.amount(forGrams: grams).kcal.kcalText).font(.rounded(.title3, weight: .bold)).foregroundStyle(Theme.ink)
+                    Text(product.per100g.amount(forGrams: grams(product)).kcal.kcalText).font(.rounded(.title3, weight: .bold)).foregroundStyle(Theme.ink)
                 }
                 Button {
-                    let item = EstimatedItem(name: product.name, grams: grams, gramsLow: grams, gramsHigh: grams, per100g: product.per100g,
+                    let amount = grams(product)
+                    let item = EstimatedItem(name: product.name, grams: amount, gramsLow: amount, gramsHigh: amount, per100g: product.per100g,
                                              food: FoodMatch(id: product.id, name: product.name, source: product.source), method: .label, confidence: 1)
                     Store.save(MealEstimate(title: product.name, items: [item], overallConfidence: 1, clarifyingQuestion: nil, warnings: [], modelID: nil, usedDepth: false),
                                mealType: mealType, photo: nil, source: "barcode", in: context)
@@ -94,6 +95,14 @@ struct BarcodeFlowView: View {
         }
         .padding(Theme.m)
         .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private func servingGrams(_ product: FoodRecord) -> Double {
+        PortionSizes.servingGrams(name: product.name, category: product.category)
+    }
+
+    private func grams(_ product: FoodRecord) -> Double {
+        servings * servingGrams(product)
     }
 
     private func lookUp(_ payload: String) async {

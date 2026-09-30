@@ -9,6 +9,8 @@ struct ReviewView: View {
     var onSave: (MealEstimate) -> Void
     var onRetake: () -> Void
 
+    /// Each food's everyday unit, fixed from what the analysis saw (so "the piece" stays the same piece while editing).
+    @State private var profiles: [UUID: PortionProfile]
     @State private var selected: UUID?
     @State private var showingSearch = false
     @State private var appeared = false
@@ -17,6 +19,7 @@ struct ReviewView: View {
     init(image: UIImage, estimate: MealEstimate, mealType: Binding<MealType>, onSave: @escaping (MealEstimate) -> Void, onRetake: @escaping () -> Void) {
         self.image = image
         _estimate = State(initialValue: estimate)
+        _profiles = State(initialValue: Dictionary(estimate.items.map { ($0.id, $0.portionProfile) }, uniquingKeysWith: { first, _ in first }))
         _mealType = mealType
         self.onSave = onSave
         self.onRetake = onRetake
@@ -46,10 +49,12 @@ struct ReviewView: View {
             .toolbar { toolbar }
             .sheet(isPresented: $showingSearch) {
                 FoodSearchView { record, grams in
-                    estimate.items.append(EstimatedItem(
+                    let item = EstimatedItem(
                         name: record.name, grams: grams, gramsLow: grams, gramsHigh: grams, per100g: record.per100g,
                         food: FoodMatch(id: record.id, name: record.name, source: record.source), method: .userNote, confidence: 1
-                    ))
+                    )
+                    profiles[item.id] = item.portionProfile
+                    estimate.items.append(item)
                 }
                 .presentationDetents([.medium, .large])
             }
@@ -96,7 +101,7 @@ struct ReviewView: View {
         VStack(spacing: 0) {
             Hairline()
             ForEach($estimate.items) { $item in
-                ItemRow(item: $item, isSelected: selected == item.id) {
+                ItemRow(item: $item, profile: profiles[item.id] ?? item.portionProfile, isSelected: selected == item.id) {
                     withAnimation(Theme.settle) { selected = selected == item.id ? nil : item.id }
                 }
                 Hairline()
@@ -236,9 +241,10 @@ private struct SlicedPhoto: View {
     }
 }
 
-/// One food: confidence dot, name, grams, kcal. Tap expands the portion controls in place.
+/// One food: confidence dot, name, amount in bites/sips/pieces, kcal. Tap expands the portion controls in place.
 private struct ItemRow: View {
     @Binding var item: EstimatedItem
+    var profile: PortionProfile
     var isSelected: Bool
     var onTap: () -> Void
 
@@ -248,7 +254,7 @@ private struct ItemRow: View {
                 .contentShape(.rect)
                 .onTapGesture(perform: onTap)
             if isSelected {
-                PortionEditor(item: $item)
+                PortionEditor(item: $item, profile: profile)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
@@ -269,7 +275,7 @@ private struct ItemRow: View {
                 }
             }
             Spacer(minLength: Theme.xs)
-            Text(item.grams.gramsText)
+            Text(profile.describe(grams: item.grams))
                 .font(.subheadline)
                 .monospacedDigit()
                 .foregroundStyle(Theme.inkSecondary)
@@ -291,26 +297,30 @@ private struct ItemRow: View {
     }
 }
 
-/// Slider over a tinted band that shows the likely range — the uncertainty stays visible.
+/// Slider over a tinted band that shows the likely range — the uncertainty stays visible. The amount reads in
+/// bites, sips, pieces or a share of the item; grams stay internal.
 private struct PortionEditor: View {
     @Binding var item: EstimatedItem
+    var profile: PortionProfile
 
     private var sliderRange: ClosedRange<Double> {
         let low = max(0, min(item.gramsLow, item.grams) * 0.5)
-        let high = max(item.gramsHigh, item.grams) * 1.6 + 10
+        let high = max(item.gramsHigh, item.grams) * 1.6 + profile.stepGrams
         return low...high
     }
 
+    private var stepTitle: String { profile.stepTitle }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.s) {
-            Slider(value: $item.grams, in: sliderRange, step: 1)
+            Slider(value: $item.grams, in: sliderRange, step: max(profile.stepGrams / 4, 1))
                 .tint(Theme.leaf)
                 .background(alignment: .leading) { rangeBand }
-                .sensoryFeedback(.selection, trigger: Int(item.grams / 10))
+                .sensoryFeedback(.selection, trigger: Int(profile.count(forGrams: item.grams) * (profile.unit == .whole ? 4 : 1)))
                 .accessibilityLabel("Portion of \(item.name)")
-                .accessibilityValue(item.grams.gramsText)
+                .accessibilityValue(profile.describe(grams: item.grams))
             HStack {
-                Text("likely \(Int(item.gramsLow))–\(Int(item.gramsHigh)) g")
+                Text("likely \(profile.describe(grams: item.gramsLow, approximate: false)) to \(profile.describe(grams: item.gramsHigh, approximate: false))")
                     .font(.caption)
                     .monospacedDigit()
                     .foregroundStyle(Theme.inkSecondary)
@@ -322,23 +332,38 @@ private struct PortionEditor: View {
                         .lineLimit(1)
                 }
             }
-            GlassEffectContainer(spacing: 20) {
-                HStack(spacing: Theme.xs) {
-                    ForEach([-25.0, -10.0, 10.0, 25.0], id: \.self) { delta in
-                        Button(delta > 0 ? "+\(Int(delta)) g" : "\(Int(delta)) g") {
-                            withAnimation(Theme.snap) { item.grams = max(0, item.grams + delta) }
-                        }
-                        .buttonStyle(.glass)
-                        .font(.caption.weight(.semibold))
-                    }
-                }
-            }
+            stepButtons
             if !item.notes.isEmpty {
                 Text(item.notes)
                     .font(.footnote)
                     .foregroundStyle(Theme.inkSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+        }
+    }
+
+    private var stepButtons: some View {
+        GlassEffectContainer(spacing: 20) {
+            HStack(spacing: Theme.xs) {
+                Button("− \(stepTitle)") {
+                    withAnimation(Theme.snap) { item.grams = max(0, item.grams - profile.stepGrams) }
+                }
+                .buttonStyle(.glass)
+                .accessibilityLabel("One \(profile.unit == .whole ? "quarter" : profile.noun(for: 1)) less")
+                Button("+ \(stepTitle)") {
+                    withAnimation(Theme.snap) { item.grams += profile.stepGrams }
+                }
+                .buttonStyle(.glass)
+                .accessibilityLabel("One \(profile.unit == .whole ? "quarter" : profile.noun(for: 1)) more")
+                if profile.unit != .whole {
+                    Button("Half") {
+                        withAnimation(Theme.snap) { item.grams = (item.grams / 2).rounded() }
+                    }
+                    .buttonStyle(.glass)
+                    .accessibilityLabel("Half of it")
+                }
+            }
+            .font(.caption.weight(.semibold))
         }
     }
 
