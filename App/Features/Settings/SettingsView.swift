@@ -9,6 +9,7 @@ struct SettingsView: View {
     @State private var proxyToken = ""
     @State private var testResult: String?
     @State private var testing = false
+    @State private var testSucceeded: Bool?
     @State private var confirmingDelete = false
     @State private var editingProfile = false
 
@@ -16,7 +17,7 @@ struct SettingsView: View {
         @Bindable var model = model
         NavigationStack {
             Form {
-                Section("Your plan") {
+                Section {
                     if let profile = model.profile, let targets = model.targets {
                         LabeledContent("Daily target", value: targets.kcal.kcalText)
                         LabeledContent("Goal", value: "\(profile.goalWeightKg.oneDecimal) kg at \(profile.weeklyLossKg.oneDecimal) kg/week")
@@ -25,6 +26,8 @@ struct SettingsView: View {
                         }
                     }
                     Button("Edit profile and goal") { editingProfile = true }
+                } header: {
+                    LabelText("Your plan")
                 }
 
                 Section {
@@ -61,7 +64,11 @@ struct SettingsView: View {
                         } label: {
                             HStack {
                                 Text("Test connection")
-                                if testing { Spacer(); ProgressView() }
+                                Spacer()
+                                Image(systemName: statusSymbol)
+                                    .foregroundStyle(statusColor)
+                                    .symbolEffect(.pulse, isActive: testing)
+                                    .contentTransition(.symbolEffect(.replace))
                             }
                         }
                         if let testResult {
@@ -69,7 +76,7 @@ struct SettingsView: View {
                         }
                     }
                 } header: {
-                    Text("AI analysis")
+                    LabelText("AI analysis")
                 } footer: {
                     Text("Photos are sent only to the connection you choose. The newest Claude Opus model is picked automatically.")
                 }
@@ -80,10 +87,10 @@ struct SettingsView: View {
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                 } header: {
-                    Text("Hints for the AI")
+                    LabelText("Hints for the AI")
                 }
 
-                Section("Your data") {
+                Section {
                     ShareLink(item: Store.csvExport(in: context), preview: SharePreview("Looseweight export.csv")) {
                         Label("Export meals and weights (CSV)", systemImage: "square.and.arrow.up")
                     }
@@ -92,17 +99,22 @@ struct SettingsView: View {
                     } label: {
                         Label("Delete all data", systemImage: "trash")
                     }
+                } header: {
+                    LabelText("Your data")
                 }
 
-                Section("About") {
+                Section {
                     Text("Nutrition data: USDA FoodData Central SR Legacy (public domain) via the TempoLife food dataset (CC-BY-4.0). Packaged food: Open Food Facts (ODbL).")
                     Text("Looseweight gives estimates to support healthy weight loss. It is not a medical device. Talk to a doctor before large diet changes, when pregnant, or with an eating disorder.")
+                } header: {
+                    LabelText("About")
                 }
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             }
             .scrollContentBackground(.hidden)
-            .background { AmbientBackground() }
+            .background { DaylightGround() }
+            .navigationBarTitleDisplayMode(.inline)
             .navigationTitle("Settings")
             .sheet(isPresented: $editingProfile) {
                 OnboardingView(isEditing: true)
@@ -116,7 +128,21 @@ struct SettingsView: View {
         }
     }
 
+    private var statusSymbol: String {
+        if testing || testSucceeded == nil { return "antenna.radiowaves.left.and.right" }
+        return testSucceeded == true ? "checkmark.circle.fill" : "xmark.circle.fill"
+    }
+
+    private var statusColor: Color {
+        switch testSucceeded {
+        case true?: Theme.leaf
+        case false?: Theme.ember
+        case nil: Theme.inkTertiary
+        }
+    }
+
     private func testConnection() async {
+        testSucceeded = nil
         guard let connection = model.connection else {
             testResult = model.connectionProblem
             return
@@ -126,10 +152,13 @@ struct SettingsView: View {
         do {
             let id = try await model.resolveModel(client: ClaudeClient(connection: connection))
             testResult = "Connected. Using \(id)."
+            testSucceeded = true
         } catch let error as ClaudeError {
             testResult = error.userMessage
+            testSucceeded = false
         } catch {
             testResult = error.localizedDescription
+            testSucceeded = false
         }
     }
 }

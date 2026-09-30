@@ -1,6 +1,7 @@
 import LooseweightKit
 import SwiftUI
 
+/// "Drawing the plate": one outline at the top that gains information with every step.
 struct OnboardingView: View {
     var isEditing = false
 
@@ -23,192 +24,80 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
-            AmbientBackground()
-            VStack(spacing: 20) {
-                ProgressView(value: Double(page + 1), total: 4)
-                    .tint(Theme.teal)
-                    .padding(.horizontal, 24)
-                    .padding(.top, 12)
-                TabView(selection: $page) {
-                    welcome.tag(0)
-                    aboutYou.tag(1)
-                    goal.tag(2)
-                    plan.tag(3)
+            DaylightGround()
+            VStack(spacing: Theme.l) {
+                OnboardingPlate(step: page, pace: pace)
+                    .frame(width: page == 3 ? 140 : 120, height: page == 3 ? 140 : 120)
+                    .padding(.top, Theme.l)
+                    .animation(Theme.settle, value: page)
+                ScrollView {
+                    stepContent
+                        .padding(.horizontal, Theme.gutter)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                .animation(Theme.spring, value: page)
+                .scrollIndicators(.hidden)
                 footer
             }
         }
+        .sensoryFeedback(.selection, trigger: page)
         .onAppear(perform: loadExisting)
     }
 
-    private var welcome: some View {
-        card {
-            VStack(alignment: .leading, spacing: 18) {
-                Image(systemName: "camera.macro.circle.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(Theme.teal.gradient)
-                Text("Lose weight by just taking a photo")
-                    .font(.rounded(.largeTitle, weight: .bold))
-                VStack(alignment: .leading, spacing: 12) {
-                    point("cube.transparent", "Your iPhone measures the food in 3D with its camera and LiDAR.")
-                    point("sparkles", "Claude AI names each food and weighs it from those measurements.")
-                    point("checkmark.seal", "Calories come from the USDA food database, not from guesses.")
-                    point("chart.line.downtrend.xyaxis", "Your daily target learns how much you really burn.")
-                }
-            }
+    @ViewBuilder
+    private var stepContent: some View {
+        switch page {
+        case 0:
+            WelcomeStep().transition(stepTransition)
+        case 1:
+            AboutYouStep(sex: $sex, birthYear: $birthYear, heightCm: $heightCm, weightKg: $weightKg)
+                .transition(stepTransition)
+        case 2:
+            GoalStep(goalKg: $goalKg, pace: $pace, activity: $activity, problems: problems)
+                .transition(stepTransition)
+        default:
+            PlanStep(draft: draft)
+                .transition(stepTransition)
         }
     }
 
-    private var aboutYou: some View {
-        card {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("About you").font(.rounded(.title, weight: .bold))
-                Picker("Sex", selection: $sex) {
-                    Text("Female").tag(BiologicalSex.female)
-                    Text("Male").tag(BiologicalSex.male)
-                }
-                .pickerStyle(.segmented)
-                numberRow("Birth year", value: Binding(get: { Double(birthYear) }, set: { birthYear = Int($0) }), range: 1925...2012, step: 1, unit: "", digits: 0)
-                numberRow("Height", value: $heightCm, range: 120...230, step: 1, unit: "cm", digits: 0)
-                numberRow("Weight", value: $weightKg, range: 35...300, step: 0.5, unit: "kg", digits: 1)
-            }
-        }
-    }
-
-    private var goal: some View {
-        card {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Your goal").font(.rounded(.title, weight: .bold))
-                numberRow("Goal weight", value: $goalKg, range: 35...300, step: 0.5, unit: "kg", digits: 1)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Pace").font(.rounded(.subheadline, weight: .semibold))
-                    Picker("Pace", selection: $pace) {
-                        Text("Gentle 0.25").tag(0.25)
-                        Text("Steady 0.5").tag(0.5)
-                        Text("Faster 0.75").tag(0.75)
-                    }
-                    .pickerStyle(.segmented)
-                    Text("kg per week").font(.rounded(.caption)).foregroundStyle(.secondary)
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Activity").font(.rounded(.subheadline, weight: .semibold))
-                    Picker("Activity", selection: $activity) {
-                        ForEach(ActivityLevel.allCases, id: \.self) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.menu)
-                }
-                ForEach(problems, id: \.self) { problem in
-                    if case let .goalBelowHealthyWeight(minimum) = problem {
-                        Label("For your height, the lowest healthy goal is \(minimum.oneDecimal) kg.", systemImage: "heart.text.square")
-                            .font(.rounded(.footnote, weight: .medium))
-                            .foregroundStyle(Theme.coral)
-                    }
-                }
-            }
-        }
-    }
-
-    private var plan: some View {
-        let targets = EnergyModel.targets(for: draft)
-        let deficit = targets.maintenanceKcal - targets.kcal
-        let days = EnergyModel.daysToGoal(currentKg: weightKg, goalKg: goalKg, dailyDeficitKcal: deficit)
-        return card {
-            VStack(alignment: .leading, spacing: 18) {
-                Text("Your daily plan").font(.rounded(.title, weight: .bold))
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("\(Int(targets.kcal))")
-                        .font(.system(size: 64, weight: .bold, design: .rounded))
-                        .foregroundStyle(Theme.teal)
-                        .contentTransition(.numericText())
-                        .accessibilityIdentifier("planTarget")
-                    Text("kcal a day").font(.rounded(.title3, weight: .semibold)).foregroundStyle(.secondary)
-                }
-                HStack(spacing: 12) {
-                    macro("Protein", targets.proteinG, Theme.protein)
-                    macro("Carbs", targets.carbsG, Theme.carbs)
-                    macro("Fat", targets.fatG, Theme.fat)
-                }
-                Text("You burn about \(Int(targets.maintenanceKcal)) kcal a day." + (days.map { " At this pace you reach \(goalKg.oneDecimal) kg in about \(max($0 / 7, 1)) weeks." } ?? ""))
-                    .font(.rounded(.subheadline))
-                    .foregroundStyle(.secondary)
-                ForEach(targets.notes, id: \.self) { note in
-                    Label(note, systemImage: "info.circle").font(.rounded(.footnote)).foregroundStyle(.secondary)
-                }
-            }
-        }
+    private var stepTransition: AnyTransition {
+        .asymmetric(insertion: .push(from: .trailing), removal: .push(from: .leading))
     }
 
     private var footer: some View {
-        HStack(spacing: 12) {
-            if page > 0 {
-                Button("Back") { withAnimation(Theme.spring) { page -= 1 } }
-                    .buttonStyle(.glass)
-                    .controlSize(.large)
-            } else if isEditing {
-                Button("Cancel") { dismiss() }
-                    .buttonStyle(.glass)
-                    .controlSize(.large)
-            }
-            Button {
-                if page < 3 {
-                    withAnimation(Theme.spring) { page += 1 }
-                } else {
-                    model.profile = draft
-                    if isEditing { dismiss() }
+        VStack(spacing: Theme.m) {
+            PageDots(count: 4, current: page)
+            HStack(spacing: Theme.s) {
+                if page > 0 {
+                    Button("Back") { withAnimation(Theme.settle) { page -= 1 } }
+                        .buttonStyle(.glass)
+                        .controlSize(.large)
+                } else if isEditing {
+                    Button("Cancel") { dismiss() }
+                        .buttonStyle(.glass)
+                        .controlSize(.large)
                 }
-            } label: {
-                Text(page < 3 ? "Continue" : (isEditing ? "Save" : "Start"))
-                    .font(.rounded(.headline, weight: .semibold))
-                    .frame(maxWidth: .infinity)
+                Button {
+                    if page < 3 {
+                        withAnimation(Theme.settle) { page += 1 }
+                    } else {
+                        model.profile = draft
+                        if isEditing { dismiss() }
+                    }
+                } label: {
+                    Text(page < 3 ? "Continue" : (isEditing ? "Save" : "Start"))
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glassProminent)
+                .tint(Theme.leaf)
+                .controlSize(.large)
+                .disabled(page == 2 && !problems.isEmpty)
+                .accessibilityIdentifier("onboardingContinue")
             }
-            .buttonStyle(.glassProminent)
-            .controlSize(.large)
-            .disabled(page == 2 && !problems.isEmpty)
-            .accessibilityIdentifier("onboardingContinue")
         }
-        .padding(.horizontal, 24)
-        .padding(.bottom, 24)
-    }
-
-    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        ScrollView {
-            GlassCard(padding: 24) { content() }
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-        }
-        .scrollIndicators(.hidden)
-    }
-
-    private func point(_ icon: String, _ text: String) -> some View {
-        Label {
-            Text(text).font(.rounded(.body))
-        } icon: {
-            Image(systemName: icon).foregroundStyle(Theme.teal)
-        }
-    }
-
-    private func numberRow(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double, unit: String, digits: Int) -> some View {
-        HStack {
-            Text(title).font(.rounded(.subheadline, weight: .semibold))
-            Spacer()
-            Text(String(format: "%.\(digits)f", value.wrappedValue) + (unit.isEmpty ? "" : " \(unit)"))
-                .font(.rounded(.title3, weight: .bold))
-                .monospacedDigit()
-            Stepper(title, value: value, in: range, step: step)
-                .labelsHidden()
-        }
-    }
-
-    private func macro(_ title: String, _ grams: Double, _ color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.rounded(.caption, weight: .medium)).foregroundStyle(.secondary)
-            Text("\(Int(grams)) g").font(.rounded(.headline, weight: .bold)).foregroundStyle(color)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .glassEffect(.regular.tint(color.opacity(0.12)), in: .rect(cornerRadius: 16))
+        .padding(.horizontal, Theme.l)
+        .padding(.bottom, Theme.l)
     }
 
     private func loadExisting() {
@@ -220,5 +109,301 @@ struct OnboardingView: View {
         goalKg = profile.goalWeightKg
         activity = profile.activity
         pace = profile.weeklyLossKg
+    }
+}
+
+// MARK: - The plate being drawn
+
+private struct OnboardingPlate: View {
+    var step: Int
+    var pace: Double
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var drawn: CGFloat = 0
+
+    private var rimWidth: CGFloat { step >= 2 ? 4 + CGFloat(pace) * 8 : 5 }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .trim(from: 0, to: drawn)
+                .stroke(Theme.ink.opacity(0.7), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            if step >= 1 {
+                PlateRim(
+                    macros: PlateView.Macros(protein: 1, carbs: 1, fat: 1, proteinTarget: 1, carbsTarget: 1, fatTarget: 1),
+                    lineWidth: rimWidth
+                )
+                .padding(6)
+                .transition(.scale(scale: 0.9).combined(with: .opacity))
+            }
+            if step >= 3 {
+                Circle()
+                    .fill(Theme.leaf.opacity(0.22))
+                    .padding(rimWidth + 14)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .animation(Theme.fill, value: step)
+        .animation(Theme.settle, value: pace)
+        .onAppear {
+            if reduceMotion {
+                drawn = 1
+            } else {
+                withAnimation(.easeInOut(duration: 1.2)) { drawn = 1 }
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+private struct PageDots: View {
+    var count: Int
+    var current: Int
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<count, id: \.self) { index in
+                Capsule()
+                    .fill(index == current ? Theme.ink : Theme.hairline)
+                    .frame(width: index == current ? 18 : 6, height: 6)
+            }
+        }
+        .animation(Theme.snap, value: current)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Step \(current + 1) of \(count)")
+    }
+}
+
+// MARK: - Steps
+
+private struct WelcomeStep: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.l) {
+            Text("Lose weight by just taking a photo")
+                .font(.system(size: 40, weight: .semibold, design: .rounded))
+                .tracking(-1)
+                .foregroundStyle(Theme.ink)
+            VStack(alignment: .leading, spacing: Theme.m) {
+                point("cube.transparent", "Your iPhone measures the food in 3D with its camera and LiDAR.")
+                point("sparkles", "Claude AI names each food and weighs it from those measurements.")
+                point("checkmark.seal", "Calories come from the USDA food database, not from guesses.")
+                point("chart.line.downtrend.xyaxis", "Your daily target learns how much you really burn.")
+            }
+        }
+    }
+
+    private func point(_ icon: String, _ text: String) -> some View {
+        Label {
+            Text(text).font(.body).foregroundStyle(Theme.inkSecondary)
+        } icon: {
+            Image(systemName: icon).foregroundStyle(Theme.leaf)
+        }
+    }
+}
+
+private struct AboutYouStep: View {
+    @Binding var sex: BiologicalSex
+    @Binding var birthYear: Int
+    @Binding var heightCm: Double
+    @Binding var weightKg: Double
+
+    private static let years = Array((1925...2012).reversed())
+    private static let heights = Array(stride(from: 120.0, through: 230.0, by: 1.0))
+    private static let weights = Array(stride(from: 35.0, through: 300.0, by: 0.5))
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.l) {
+            Text("About you")
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(Theme.ink)
+            SexPicker(sex: $sex)
+            HStack(spacing: 0) {
+                wheel("Born", selection: $birthYear) {
+                    ForEach(Self.years, id: \.self) { Text(String($0)).tag($0) }
+                }
+                wheel("Height cm", selection: $heightCm) {
+                    ForEach(Self.heights, id: \.self) { Text("\(Int($0))").tag($0) }
+                }
+                wheel("Weight kg", selection: $weightKg) {
+                    ForEach(Self.weights, id: \.self) { Text($0.oneDecimal).tag($0) }
+                }
+            }
+        }
+        .onAppear {
+            heightCm = heightCm.rounded()
+            weightKg = (weightKg * 2).rounded() / 2
+        }
+    }
+
+    private func wheel<Value: Hashable, Content: View>(_ title: String, selection: Binding<Value>, @ViewBuilder content: () -> Content) -> some View {
+        VStack(spacing: 0) {
+            LabelText(title)
+            Picker(title, selection: selection, content: content)
+                .pickerStyle(.wheel)
+                .frame(height: 150)
+                .clipped()
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+/// Two glass segments in one container; the selection moves between them.
+private struct SexPicker: View {
+    @Binding var sex: BiologicalSex
+    @Namespace private var glass
+
+    var body: some View {
+        GlassEffectContainer(spacing: 20) {
+            HStack(spacing: Theme.s) {
+                segment("Female", .female)
+                segment("Male", .male)
+            }
+        }
+        .sensoryFeedback(.selection, trigger: sex)
+    }
+
+    private func segment(_ title: String, _ value: BiologicalSex) -> some View {
+        let isOn = sex == value
+        return Button {
+            withAnimation(Theme.snap) { sex = value }
+        } label: {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(isOn ? Theme.ink : Theme.inkSecondary)
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(isOn ? .regular.tint(Theme.leaf.opacity(0.35)).interactive() : .regular.interactive(), in: .capsule)
+        .glassEffectID(value == .female ? "female" : "male", in: glass)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+}
+
+private struct GoalStep: View {
+    @Binding var goalKg: Double
+    @Binding var pace: Double
+    @Binding var activity: ActivityLevel
+    var problems: [EnergyModel.ProfileProblem]
+
+    private static let weights = Array(stride(from: 35.0, through: 300.0, by: 0.5))
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.l) {
+            Text("Your goal")
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(Theme.ink)
+            VStack(spacing: 0) {
+                LabelText("Goal weight kg")
+                Picker("Goal weight", selection: $goalKg) {
+                    ForEach(Self.weights, id: \.self) { Text($0.oneDecimal).tag($0) }
+                }
+                .pickerStyle(.wheel)
+                .frame(height: 130)
+                .clipped()
+            }
+            VStack(alignment: .leading, spacing: Theme.xs) {
+                LabelText("Pace · kg per week")
+                GlassEffectContainer(spacing: 20) {
+                    HStack(spacing: Theme.xs) {
+                        chip("Gentle 0.25", 0.25)
+                        chip("Steady 0.5", 0.5)
+                        chip("Faster 0.75", 0.75)
+                    }
+                }
+            }
+            HStack {
+                LabelText("Activity")
+                Spacer()
+                Picker("Activity", selection: $activity) {
+                    ForEach(ActivityLevel.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.menu)
+            }
+            ForEach(problems, id: \.self) { problem in
+                if case let .goalBelowHealthyWeight(minimum) = problem {
+                    Label("For your height, the lowest healthy goal is \(minimum.oneDecimal) kg.", systemImage: "heart.text.square")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(Theme.ember)
+                }
+            }
+        }
+        .onAppear { goalKg = (goalKg * 2).rounded() / 2 }
+        .sensoryFeedback(.selection, trigger: pace)
+    }
+
+    private func chip(_ title: String, _ value: Double) -> some View {
+        let isOn = pace == value
+        return Button {
+            withAnimation(Theme.snap) { pace = value }
+        } label: {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(isOn ? Theme.ink : Theme.inkSecondary)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(isOn ? .regular.tint(Theme.leaf.opacity(0.35)).interactive() : .regular.interactive(), in: .capsule)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+}
+
+private struct PlanStep: View {
+    var draft: UserProfile
+
+    @State private var shown = 0.0
+
+    var body: some View {
+        let targets = EnergyModel.targets(for: draft)
+        let deficit = targets.maintenanceKcal - targets.kcal
+        let days = EnergyModel.daysToGoal(currentKg: draft.weightKg, goalKg: draft.goalWeightKg, dailyDeficitKcal: deficit)
+        VStack(alignment: .leading, spacing: Theme.l) {
+            Text("Your daily plan")
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(Theme.ink)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("\(Int(shown))")
+                    .font(.hero)
+                    .tracking(-2)
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
+                    .foregroundStyle(Theme.ink)
+                    .contentTransition(.numericText(value: shown))
+                    .accessibilityLabel("\(Int(targets.kcal)) kcal a day")
+                    .accessibilityIdentifier("planTarget")
+                LabelText("kcal a day")
+            }
+            HStack(spacing: Theme.l) {
+                macro("Protein", targets.proteinG, Theme.protein)
+                macro("Carbs", targets.carbsG, Theme.carbs)
+                macro("Fat", targets.fatG, Theme.fat)
+            }
+            Text("You burn about \(Int(targets.maintenanceKcal)) kcal a day." + (days.map { " At this pace you reach \(draft.goalWeightKg.oneDecimal) kg in about \(max($0 / 7, 1)) weeks." } ?? ""))
+                .font(.body)
+                .foregroundStyle(Theme.inkSecondary)
+            ForEach(targets.notes, id: \.self) { note in
+                Label(note, systemImage: "info.circle")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.inkSecondary)
+            }
+        }
+        .onAppear {
+            withAnimation(Theme.fill) { shown = targets.kcal.rounded(.down) }
+        }
+        .onChange(of: targets.kcal) { _, value in
+            withAnimation(Theme.snap) { shown = value.rounded(.down) }
+        }
+    }
+
+    private func macro(_ title: String, _ grams: Double, _ color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            LabelText(title, color: color)
+            Text("\(Int(grams)) g")
+                .font(.numeric)
+                .foregroundStyle(Theme.ink)
+        }
     }
 }
