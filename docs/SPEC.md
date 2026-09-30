@@ -1,44 +1,67 @@
 # Looseweight — build spec
 
 > Goal (owner's words): *"an app that will enable users to lose weight by just logging the calories accurately by camera (very accurately). The app UI is iOS Liquid Glass."*
+>
+> Product shape: **Log or Plan.** Every meal photo is either a log (what I ate) or a plan (what I'm about to eat).
+> **No weights anywhere in the user experience**: people see bites, sips, pieces, servings and fractions of an
+> item, never grams and never a kitchen scale. Grams exist only inside the engine.
 
 ## 1. What the user does
 
 | Step | Screen | What happens |
 |---|---|---|
 | 1 | Onboarding | Sex, age, height, weight, goal weight, activity, pace → daily calorie target |
-| 2 | Today | Calorie ring (left today), protein / carbs / fat, meals of the day |
-| 3 | Scan | Camera. Hold the phone flat over the plate. LiDAR depth is captured with the photo when the phone has it |
-| 4 | Analyzing | Claude finds every food, measures each one with the depth map, matches it to the nutrition database |
-| 5 | Review | Each item with grams, range and confidence. One tap to change grams. Save |
-| 6 | Progress | Weight log, trend line, real daily burn (learned from your data), goal date |
+| 2 | Today | The plate (kcal left), protein / carbs / fat, confirmed meals of the day |
+| 3 | Scan | Camera. Hold the phone flat over the plate and tap. A ~1.8 s sweep follows (like a Live Photo): LiDAR depth keeps fusing from every angle and extra views are collected |
+| 4 | Analyzing + choice | While Claude finds and measures every food, two glass buttons ask: **Log** (what I ate) or **Plan** (what I'm about to eat) |
+| 5a | Review (Log) | Each item as "about 7 bites", "5 sips", "6 pieces" or "2/3 of the piece", with range and confidence. Nudge ±1 bite/sip/piece or ¼ of the item. Save → counts today |
+| 5b | Plan | For each food: "Rice: 6 bites", "Chicken: 2/3 of the piece", "Juice: 5 sips", "Bread: skip". Save plan → Inbox |
+| 6 | Inbox (tab with badge) | Planned meals wait here. Ate it all as planned / Ate part (1/4, Half, 3/4) / Didn't eat. Only confirmed amounts are logged and count toward today |
+| 7 | Reminder | A gentle sheet at the next app open (plan ≥ 15 min old) and a local notification about an hour after planning |
+| 8 | Progress | Weight log, trend line, real daily burn (learned from your data), goal date |
 
-Barcode and manual search cover packaged food and home cooking with a kitchen scale.
+Barcode and manual search add food by **servings** (½ steps), shown with a bites/sips/pieces hint. There is no grams field anywhere.
+
+## 1a. Planning (MealPlanner)
+
+- Budget = what is left today from **confirmed** meals (targets − eaten, never below 0), times the meal's share:
+  breakfast 35 %, lunch 50 %, dinner 100 %, snack 25 % — the rest stays for later meals.
+- Each food moves in its own unit: one bite, one sip, one piece, or nice fractions of a single item
+  (¼, ⅓, ½, ⅔, ¾, all). Greedy: protein still needed counts triple, fibre helps, calories never exceed the budget,
+  carbs and fat stay within what is left (+8 g / +4 g slack). Never below zero; nothing left → everything "Skip".
+- Portion sizes (`PortionSizes`): drinks → sips of ~20 mL; small countable foods (cherry tomatoes, nuggets, dates,
+  falafel…) → pieces; one big item (a chicken breast, a fillet, a sandwich, a banana) → fraction of the piece;
+  sauces/oil → fraction of the sauce; everything else → bites (rice/pasta/meat ~15 g, vegetables ~12 g, nuts ~8 g).
+- `PlannedMeal` + `PlanConfirmation` (pending / ate as planned / ate part / didn't eat) + `PlanInbox` reminder rules
+  live in LooseweightKit; the app stores them as `PlannedMealRecord` (SwiftData) and logs the eaten share on confirmation.
 
 ## 2. How the accuracy works
 
-Calories = **grams** × **calories per gram**. Both halves are grounded, not guessed.
+Calories = **grams** × **calories per gram** (inside the engine; the user sees bites, sips, pieces and fractions). Both halves are grounded, not guessed.
 The iPhone measures on the device; the AI names the food and does the judgment.
 
 ```mermaid
 flowchart LR
   subgraph Phone["iPhone, on device"]
     AR[ARKit\ntable plane + true scale\ncamera pose]
-    LI[LiDAR depth\nfused over ~1 s]
+    LI[LiDAR depth\nfused over the ~2 s sweep]
+    SW[Sweep\nsharpest extra views\nfrom new angles]
     VI[Vision\nitem masks, labels,\ntext, barcodes, blur]
     HF[Height field\n4 mm grid on the table]
     AR --> HF
     LI --> HF
   end
   HF --> MS[Per-item area cm²,\nvolume mL, heights]
+  SW --> C
   VI --> MS
   MS --> C[Claude vision]
   C -- search_foods --> DB[(USDA-based food table)]
   C -- measure_region --> HF
   C -- zoom_photo --> Z[Full-res crop]
   C --> J[JSON: items, food ids,\ngrams, low/high, confidence]
-  J --> N[App math:\ngrams × per-100 g values]
-  N --> R[Review: user confirms]
+  J --> N[App math:\ngrams × per-100 g values\n(internal only)]
+  N --> R[Log: review in bites/sips/pieces]
+  N --> P[Plan: MealPlanner → Inbox → confirm]
   R --> M[(Portion memory)]
   M -. hints next time .-> C
 ```
@@ -48,7 +71,8 @@ flowchart LR
 | Power | Devices | Output |
 |---|---|---|
 | ARKit world tracking + horizontal plane | every supported iPhone | table plane, camera pose, cm-per-pixel at the plate, plate diameter, item footprint area (cm²) |
-| LiDAR scene depth, fused over several frames | Pro iPhones | height field above the table → item volume (mL), heights, plate floor |
+| LiDAR scene depth, fused over the capture sweep | Pro iPhones | height field above the table → item volume (mL), heights, plate floor — from more viewpoints |
+| Capture sweep (~1.8 s after the shot) | every AR iPhone | sharpest frames from the most different angles (`SweepSelector`) sent as extra images |
 | Vision foreground instance masks | all | separate objects (plate, bowl, cup, items) as numbered regions |
 | Vision image classification | all | quick food label hints |
 | Vision text recognition | all | nutrition labels and packaging text, read exactly |
@@ -64,7 +88,7 @@ flowchart LR
 5. Calls `zoom_photo` for a full-resolution crop when detail is unclear.
 6. The app re-checks the arithmetic (volume × density) and the database match.
 
-**Then the user** sees grams with a low–high range and can adjust. Corrections become portion memory and are sent as hints next time.
+**Then the user** sees each amount as bites, sips, pieces or a fraction of the item, with a likely range, and can nudge it one unit at a time. Corrections become portion memory (grams, internal) and are sent as hints next time. Notes shown to the user never mention grams (the prompt asks for pieces/bites/plain words).
 
 ## 3. Weight-loss engine
 
