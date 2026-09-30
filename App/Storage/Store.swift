@@ -114,15 +114,15 @@ enum Store {
         try? context.save()
     }
 
-    static func csvExport(in context: ModelContext) -> String {
+    static func csvExport(in context: ModelContext, units: UnitsMode = .default) -> String {
+        let amounts = AmountFormatter(mode: units)
         let meals = (try? context.fetch(FetchDescriptor<MealLog>(sortBy: [SortDescriptor(\.date)]))) ?? []
         let formatter = ISO8601DateFormatter()
-        var lines = ["date,meal,food,portion,kcal,protein_g,carbs_g,fat_g,method"]
+        var lines = [amounts.csvMealHeader]
         for meal in meals {
             for item in meal.items {
-                let n = item.nutrients
                 let name = item.name.replacingOccurrences(of: "\"", with: "'")
-                lines.append("\(formatter.string(from: meal.date)),\(meal.mealType.rawValue),\"\(name)\",\"\(item.portionText)\",\(Int(n.kcal)),\(n.protein.oneDecimal),\(n.carbs.oneDecimal),\(n.fat.oneDecimal),\(item.method.rawValue)")
+                lines.append("\(formatter.string(from: meal.date)),\(meal.mealType.rawValue),\"\(name)\",\(amounts.csvMealColumns(portion: item.portionText, grams: item.grams, nutrients: item.nutrients, method: item.method.rawValue))")
             }
         }
         lines.append("")

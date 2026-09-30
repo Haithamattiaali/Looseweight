@@ -14,6 +14,27 @@ final class AppTests: XCTestCase {
         XCTAssertTrue(estimate.kcalRange.contains(estimate.total.kcal))
     }
 
+    func testUnitsModeDefaultsToEverydayAndResets() throws {
+        let suite = "lw.tests.units.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let fresh = AppModel(defaults: defaults, arguments: [])
+        XCTAssertEqual(fresh.unitsMode, .everyday)
+        XCTAssertEqual(fresh.amounts.mode, .everyday)
+        fresh.unitsMode = .precise
+        XCTAssertEqual(AppModel(defaults: defaults, arguments: []).unitsMode, .precise)
+        XCTAssertEqual(AppModel(defaults: defaults, arguments: ["-resetState"]).unitsMode, .everyday)
+    }
+
+    func testEverydayExportHasNoGramColumns() throws {
+        let container = try ModelContainer(for: Schema(LooseweightSchema.models), configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        let context = container.mainContext
+        Store.save(DemoContent.estimate(), mealType: .lunch, photo: nil, in: context)
+        let everyday = Store.csvExport(in: context)
+        XCTAssertFalse(everyday.contains("_g"))
+        XCTAssertTrue(Store.csvExport(in: context, units: .precise).contains("protein_g"))
+    }
+
     func testModelImageSizeStaysInsideTheLimits() {
         let size = ImageTools.sizeForModel(width: 3024, height: 4032)
         XCTAssertLessThanOrEqual(size.width * size.height, ImageTools.modelMaxPixels)

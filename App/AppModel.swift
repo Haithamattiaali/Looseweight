@@ -66,6 +66,16 @@ final class AppModel {
             defaults.set(newValue, forKey: Keys.cuisine)
         }
     }
+    /// Everyday (bites, sips, pieces; no grams) or Precise (adds grams). Default Everyday.
+    var unitsMode: UnitsMode {
+        get { storedUnitsMode }
+        set {
+            storedUnitsMode = newValue
+            defaults.set(newValue.rawValue, forKey: Keys.unitsMode)
+        }
+    }
+    /// The one formatter every screen uses for amounts and macros.
+    var amounts: AmountFormatter { AmountFormatter(mode: unitsMode) }
     /// When the app last came to the foreground (for the Inbox reminder).
     var lastAppOpen: Date? {
         get { defaults.object(forKey: Keys.lastAppOpen) as? Date }
@@ -77,6 +87,7 @@ final class AppModel {
     private var storedProxyURL: String
     private var storedModelOverride: String
     private var storedCuisineHint: String
+    private var storedUnitsMode: UnitsMode
     private(set) var hasAPIKey: Bool
     private(set) var hasProxyToken: Bool
     var lastModelID: String?
@@ -92,6 +103,7 @@ final class AppModel {
         static let proxyURL = "lw.proxyURL"
         static let modelOverride = "lw.modelOverride"
         static let cuisine = "lw.cuisine"
+        static let unitsMode = "lw.unitsMode"
         static let lastAppOpen = "lw.lastAppOpen"
         static let apiKey = "anthropic-api-key"
         static let proxyToken = "proxy-token"
@@ -101,7 +113,7 @@ final class AppModel {
         self.defaults = defaults
         isUITest = arguments.contains("-uiTest")
         if arguments.contains("-resetState") {
-            for key in [Keys.profile, Keys.aiMode, Keys.effort, Keys.proxyURL, Keys.modelOverride, Keys.cuisine] {
+            for key in [Keys.profile, Keys.aiMode, Keys.effort, Keys.proxyURL, Keys.modelOverride, Keys.cuisine, Keys.unitsMode] {
                 defaults.removeObject(forKey: key)
             }
         }
@@ -118,6 +130,7 @@ final class AppModel {
         storedEffort = AnalysisEffort(rawValue: defaults.string(forKey: Keys.effort) ?? "") ?? .high
         storedModelOverride = defaults.string(forKey: Keys.modelOverride) ?? ""
         storedCuisineHint = defaults.string(forKey: Keys.cuisine) ?? ""
+        storedUnitsMode = UnitsMode(rawValue: defaults.string(forKey: Keys.unitsMode) ?? "") ?? .default
         hasAPIKey = Keychain.read(Keys.apiKey) != nil
         hasProxyToken = Keychain.read(Keys.proxyToken) != nil
         if isUITest { storedAIMode = .demo }

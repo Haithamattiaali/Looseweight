@@ -123,6 +123,5 @@ extension UIColor {
 
 extension Double {
     var kcalText: String { "\(Int(self.rounded())) kcal" }
-    var gramsText: String { "\(Int(self.rounded())) g" }
     var oneDecimal: String { String(format: "%.1f", self) }
 }

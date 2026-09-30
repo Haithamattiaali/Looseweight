@@ -30,6 +30,8 @@ struct SettingsView: View {
                     LabelText("Your plan")
                 }
 
+                UnitsSection(mode: $model.unitsMode)
+
                 Section {
                     Picker("Connection", selection: $model.aiMode) {
                         ForEach(AIMode.allCases) { Text($0.title).tag($0) }
@@ -91,7 +93,7 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    ShareLink(item: Store.csvExport(in: context), preview: SharePreview("Looseweight export.csv")) {
+                    ShareLink(item: Store.csvExport(in: context, units: model.unitsMode), preview: SharePreview("Looseweight export.csv")) {
                         Label("Export meals and weights (CSV)", systemImage: "square.and.arrow.up")
                     }
                     Button(role: .destructive) {
@@ -159,6 +161,27 @@ struct SettingsView: View {
         } catch {
             testResult = error.localizedDescription
             testSucceeded = false
+        }
+    }
+}
+
+/// "Units: Everyday (bites, sips, pieces) / Precise (grams)" with a one-line explanation.
+private struct UnitsSection: View {
+    @Binding var mode: UnitsMode
+
+    var body: some View {
+        Section {
+            Picker("Units", selection: $mode) {
+                ForEach(UnitsMode.allCases) { option in
+                    Text(option.title).tag(option)
+                }
+            }
+            .accessibilityIdentifier("unitsPicker")
+            Text(mode.explanation)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        } header: {
+            LabelText("Units")
         }
     }
 }

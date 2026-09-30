@@ -24,6 +24,7 @@ struct LooseweightApp: App {
         WindowGroup {
             RootView()
                 .environment(model)
+                .environment(\.unitsMode, model.unitsMode)
                 .task { prepareForUITestsIfNeeded() }
         }
         .modelContainer(container)
