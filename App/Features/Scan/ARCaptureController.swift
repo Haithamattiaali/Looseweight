@@ -39,6 +39,10 @@ final class ARCaptureController: NSObject {
     static var isSupported: Bool { ARWorldTrackingConfiguration.isSupported }
     let hasLiDAR = ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth)
     private(set) var guidance = Guidance()
+    /// Live food check from Vision labels, smoothed by `FoodPresenceDetector`. `.unknown` until a few frames are in.
+    private(set) var foodVerdict: FoodPresenceDetector.Verdict = .unknown
+    @ObservationIgnored private var foodDetector = FoodPresenceDetector()
+    private let foodClassifier = LiveFoodClassifier(interval: 0.5)
     /// 0...1 while the short capture sweep runs (like a Live Photo), nil otherwise.
     private(set) var sweepProgress: Double?
 
@@ -74,11 +78,19 @@ final class ARCaptureController: NSObject {
             configuration.videoFormat = format
         }
         depthBuffer.reset()
+        foodDetector.reset()
+        foodVerdict = .unknown
+        foodClassifier.reset()
         session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
     }
 
     func stop() {
         session.pause()
+    }
+
+    fileprivate func ingestFoodLabels(_ labels: [ClassifierLabel]) {
+        let verdict = foodDetector.add(labels)
+        if verdict != foodVerdict { foodVerdict = verdict }
     }
 
     enum CaptureError: LocalizedError {
@@ -248,6 +260,10 @@ final class ARCaptureController: NSObject {
 
 extension ARCaptureController: ARSessionDelegate {
     nonisolated func session(_ session: ARSession, didUpdate frame: ARFrame) {
+        // Food check about every 0.5 s: only a small copy of the image leaves this call, never the frame.
+        foodClassifier.submit(pixelBuffer: frame.capturedImage, timestamp: frame.timestamp) { [weak self] labels in
+            Task { @MainActor [weak self] in self?.ingestFoodLabels(labels) }
+        }
         guard depthBuffer.shouldSample(at: frame.timestamp, interval: 0.15) else { return }
         if let depth = Self.depthFrame(from: frame) {
             depthBuffer.append(depth, at: frame.timestamp)

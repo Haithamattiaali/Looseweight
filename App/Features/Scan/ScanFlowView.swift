@@ -96,8 +96,10 @@ struct ScanFlowView: View {
     }
 
     private func isFailure(_ flow: AnalysisFlow) -> Bool {
-        if case .failure? = flow.outcome { return true }
-        return false
+        switch flow.outcome {
+        case .failure?, .noFood?: return true
+        default: return false
+        }
     }
 
     /// Moves on once both the analysis and the person's choice are in.
@@ -223,22 +225,34 @@ private struct CameraScreen: View {
     @State private var showingNote = false
     @State private var showingFrameHint = true
     @State private var shots = 0
+    /// The person said "It's food" while the live check disagreed.
+    @State private var foodOverride = false
+    @State private var showingFoodOverride = false
+    @State private var pendingLibraryMeal: CapturedMeal?
 
     private var arAvailable: Bool { ARCaptureController.isSupported }
     /// Without AR (simulator, demo) the frame is always "ready".
     private var ready: Bool { controller?.guidance.ready ?? true }
+    /// Live on-device check says the camera is not on food (never without AR, so demo and simulator are never blocked).
+    private var notFood: Bool { controller?.foodVerdict == .notFood }
+    /// The shutter is held back until the camera is on food or the person overrides.
+    private var blockedByFoodGate: Bool { notFood && !foodOverride }
 
     var body: some View {
         ZStack {
             preview.ignoresSafeArea()
-            CaptureFrame(ready: ready, showsHint: showingFrameHint)
+            CaptureFrame(ready: ready && !blockedByFoodGate, notFood: blockedByFoodGate, showsHint: showingFrameHint && !blockedByFoodGate)
             if let progress = controller?.sweepProgress {
                 SweepRing(progress: progress)
             }
             VStack(spacing: Theme.m) {
                 topBar
                 Spacer()
-                guidancePill
+                if blockedByFoodGate {
+                    notFoodPill
+                } else {
+                    guidancePill
+                }
                 bottomBar
             }
             .padding(.horizontal, Theme.gutter)
@@ -247,6 +261,32 @@ private struct CameraScreen: View {
         .background(Color.black)
         .sensoryFeedback(.alignment, trigger: ready) { old, new in !old && new }
         .sensoryFeedback(.impact(weight: .medium), trigger: shots)
+        .sensoryFeedback(.warning, trigger: blockedByFoodGate) { old, new in !old && new }
+        .animation(Theme.settle, value: blockedByFoodGate)
+        .onChange(of: notFood) { _, isNotFood in
+            if !isNotFood {
+                foodOverride = false
+                showingFoodOverride = false
+            }
+        }
+        .task(id: blockedByFoodGate) {
+            // Classifiers miss some dishes: after 2 s of "not food" offer an override.
+            guard blockedByFoodGate else { return }
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled, blockedByFoodGate else { return }
+            withAnimation(Theme.settle) { showingFoodOverride = true }
+        }
+        .alert("This doesn't look like food", isPresented: Binding(get: { pendingLibraryMeal != nil }, set: { if !$0 { pendingLibraryMeal = nil } })) {
+            Button("Choose another", role: .cancel) { pendingLibraryMeal = nil }
+            Button("Analyse anyway") {
+                if let meal = pendingLibraryMeal {
+                    pendingLibraryMeal = nil
+                    onCapture(meal)
+                }
+            }
+        } message: {
+            Text("No food or drink was found in this photo.")
+        }
         .onAppear {
             if arAvailable, controller == nil { controller = ARCaptureController() }
             controller?.start()
@@ -356,6 +396,42 @@ private struct CameraScreen: View {
         .accessibilityIdentifier("guidance")
     }
 
+    /// Shown instead of the guidance while the live check sees no food.
+    private var notFoodPill: some View {
+        VStack(spacing: Theme.xs) {
+            HStack(spacing: 10) {
+                Image(systemName: "fork.knife")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.honey)
+                Text("This doesn't look like food — point the camera at your meal")
+                    .font(.subheadline.weight(.semibold))
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, Theme.m)
+            .padding(.vertical, 10)
+            .modifier(ControlGlass(tint: nil, shape: Capsule()))
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("notFoodNotice")
+
+            if showingFoodOverride {
+                Button("It's food") {
+                    withAnimation(Theme.settle) {
+                        foodOverride = true
+                        showingFoodOverride = false
+                    }
+                }
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, Theme.s)
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("itsFoodOverride")
+                .transition(.opacity)
+            }
+        }
+        .transition(.opacity)
+    }
+
     private func pillMessage(_ guidance: ARCaptureController.Guidance?) -> String {
         if let progress = controller?.sweepProgress {
             return progress < 0.5 ? "Hold over the plate…" : "Tilt a little to see the sides…"
@@ -375,7 +451,7 @@ private struct CameraScreen: View {
                 .buttonBorderShape(.circle)
                 .accessibilityLabel("Choose a photo")
 
-                ShutterButton(ready: ready, isCapturing: isCapturing, action: shoot)
+                ShutterButton(ready: ready && !blockedByFoodGate, isCapturing: isCapturing, blocked: blockedByFoodGate, action: shoot)
 
                 Menu {
                     Button { showingNote = true } label: { Label("Add a note", systemImage: "text.bubble") }
@@ -393,7 +469,7 @@ private struct CameraScreen: View {
     }
 
     private func shoot() {
-        guard !isCapturing else { return }
+        guard !isCapturing, !blockedByFoodGate else { return }
         isCapturing = true
         shots += 1
         Task {
@@ -416,7 +492,13 @@ private struct CameraScreen: View {
             captureError = "That photo could not be opened."
             return
         }
-        onCapture(CapturedMeal(image: image, geometry: nil, deviceHasLiDAR: false, source: .library))
+        let meal = CapturedMeal(image: image, geometry: nil, deviceHasLiDAR: false, source: .library)
+        // Same on-device food check as the live camera, before any analysis.
+        if let cgImage = ImageTools.cgImage(image), !(await FoodGate.looksLikeFood(cgImage)) {
+            pendingLibraryMeal = meal
+            return
+        }
+        onCapture(meal)
     }
 }
 
@@ -424,6 +506,8 @@ private struct CameraScreen: View {
 private struct ShutterButton: View {
     var ready: Bool
     var isCapturing: Bool
+    /// Dimmed and disabled while the live check sees no food.
+    var blocked: Bool = false
     var action: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -443,7 +527,8 @@ private struct ShutterButton: View {
         .buttonStyle(.glassProminent)
         .buttonBorderShape(.circle)
         .tint(ready ? Theme.leaf : .gray)
-        .disabled(isCapturing)
+        .disabled(isCapturing || blocked)
+        .opacity(blocked ? 0.45 : 1)
         .accessibilityIdentifier("shutter")
         .accessibilityLabel("Measure the meal")
     }
@@ -466,9 +551,10 @@ private struct SweepRing: View {
 }
 
 /// Corner brackets around the WHOLE capture area — everything inside the frame is analysed, every plate and side.
-/// White while aligning, leaf (and slightly tighter) once level and in range.
+/// White while aligning, leaf (and slightly tighter) once level and in range, amber when the camera is not on food.
 private struct CaptureFrame: View {
     var ready: Bool
+    var notFood: Bool = false
     var showsHint: Bool
 
     var body: some View {
@@ -477,7 +563,7 @@ private struct CaptureFrame: View {
             let rect = CGRect(x: inset, y: 110, width: proxy.size.width - inset * 2, height: max(proxy.size.height - 320, 100))
             ZStack(alignment: .top) {
                 CaptureBrackets(length: ready ? 40 : 32)
-                    .stroke(ready ? Theme.leaf : Color.white.opacity(0.85), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+                    .stroke(notFood ? Theme.honey : (ready ? Theme.leaf : Color.white.opacity(0.85)), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
                     .frame(width: rect.width, height: rect.height)
                     .position(x: rect.midX, y: rect.midY)
                     .shadow(color: .black.opacity(0.3), radius: 6)
@@ -492,6 +578,7 @@ private struct CaptureFrame: View {
             }
         }
         .animation(Theme.settle, value: ready)
+        .animation(Theme.settle, value: notFood)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
